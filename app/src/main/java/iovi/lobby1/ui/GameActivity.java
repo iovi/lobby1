@@ -43,6 +43,8 @@ import iovi.lobby1.game.Voting;
  */
 public class GameActivity extends AppCompatActivity implements Announcer.Listener {
     private static final long CARD_SHOW_MS = 3_000;
+    /** Пауза между исчезновением карты и вызовом следующего игрока. */
+    private static final long CARD_PASS_PAUSE_MS = 3_000;
     private static final long AGREEMENT_MS = 60_000;
     private static final long FREE_SEATING_MS = 20_000;
     private static final long SPEECH_MS = 60_000;
@@ -53,6 +55,8 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
      * проверяет — выравниваем время, чтобы по нему нельзя было вычислить роль.
      */
     private static final long MIN_NIGHT_TURN_MS = 8_000;
+    /** Пауза после последнего ночного хода — положить телефон в центр стола. */
+    private static final long NIGHT_END_PAUSE_MS = 5_000;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final PhaseTimer timer = new PhaseTimer();
@@ -150,6 +154,7 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
     }
 
     private void dealCard(int n) {
+        callPlayer(n);
         showHandoff("Раздача карт", n,
                 "Держите телефон так, чтобы экран видели только вы.\nКарта покажется на "
                         + CARD_SHOW_MS / 1000 + " секунды.",
@@ -177,12 +182,21 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
 
         handler.postDelayed(() -> {
             if (n < Game.PLAYER_COUNT) {
-                dealCard(n + 1);
+                passAfterCard(n + 1);
             } else {
                 showMessage("Карты розданы", "Положите телефон в центр стола.",
                         "Начать договорку", this::mafiaAgreement);
             }
         }, CARD_SHOW_MS);
+    }
+
+    /** Пауза после исчезновения карты: телефон передают дальше, затем вызывается следующий игрок. */
+    private void passAfterCard(int next) {
+        View v = show(R.layout.screen_message);
+        this.<TextView>find(v, R.id.title).setText("Передайте телефон следующему игроку");
+        v.findViewById(R.id.text).setVisibility(View.GONE);
+        v.findViewById(R.id.action).setVisibility(View.GONE);
+        handler.postDelayed(() -> dealCard(next), CARD_PASS_PAUSE_MS);
     }
 
     private static String describe(Role role) {
@@ -205,16 +219,32 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
         setPhase("Ночь 0");
         game.log().section("Ночь 0");
         game.log().add("Договорка мафии, свободная посадка");
-        announcer.say("Наступает ночь. Мафия просыпается. У вас минута на договорку.");
-        showTimer("Договорка мафии",
-                "Мафия договаривается жестами.\nОстальные игроки спят.",
-                AGREEMENT_MS, "Мафия засыпает.", this::freeSeating);
+        View v = show(R.layout.screen_timer);
+        this.<TextView>find(v, R.id.title).setText("Договорка мафии");
+        this.<TextView>find(v, R.id.subtitle).setText("Мафия договаривается жестами.\nОстальные игроки спят.");
+        this.<TextView>find(v, R.id.time).setText(PhaseTimer.format(AGREEMENT_MS));
+        View pause = v.findViewById(R.id.pause);
+        View finish = v.findViewById(R.id.finish);
+        pause.setEnabled(false);
+        finish.setEnabled(false);
+        // Минута договорки идёт с момента, когда телефон закончит объявление.
+        announcer.say("Наступает ночь. Мафия просыпается. У вас минута на договорку.", () -> {
+            if (v.getParent() == null) {
+                return;
+            }
+            pause.setEnabled(true);
+            finish.setEnabled(true);
+            runTimer(v, AGREEMENT_MS, false, () -> {
+                announcer.say("Мафия засыпает.");
+                freeSeating();
+            });
+        });
     }
 
     private void freeSeating() {
         announcer.say("Свободная посадка. Двадцать секунд.");
         showTimer("Свободная посадка", "Двадцать секунд, чтобы устроиться поудобнее.",
-                FREE_SEATING_MS, null, this::startDay);
+                FREE_SEATING_MS, false, null, this::startDay);
     }
 
     // ───────────────────────────────── День ─────────────────────────────────
@@ -250,27 +280,35 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
         View v = show(R.layout.screen_speech);
         this.<TextView>find(v, R.id.title).setText("Речь игрока " + n);
         TextView hint = v.findViewById(R.id.hint);
-        hint.setText("Выставить кандидатуру (отменить выставление нельзя):");
+        hint.setText("Выберите номер и подтвердите выставление (отменить его нельзя):");
         TextView nomineesView = v.findViewById(R.id.nominees);
+        MaterialButton confirm = v.findViewById(R.id.confirm);
 
         List<Integer> allowed = new ArrayList<>(game.alive());
         allowed.removeAll(nominations);
         NumberGrid grid = new NumberGrid(v.findViewById(R.id.grid), allowed);
+        int[] chosen = {0};
         grid.setListener(number -> {
-            if (nominatedBy.containsKey(n)) {
-                return;
-            }
+            chosen[0] = number;
+            grid.select(number);
+            confirm.setEnabled(true);
+            confirm.setText("Выставить игрока " + number);
+        });
+        confirm.setOnClickListener(once(() -> {
+            int number = chosen[0];
             nominations.add(number);
             nominatedBy.put(n, number);
             grid.lock(number);
+            confirm.setEnabled(false);
+            confirm.setText("Выставлен игрок " + number);
             hint.setText("Выставление принято: игрок " + number);
             nomineesView.setText(nomineesText());
             announcer.say("Номер " + number + " принят.");
-        });
+        }));
         nomineesView.setText(nomineesText());
 
         announcer.say("Игрок " + n + ", ваша речь.");
-        runTimer(v, SPEECH_MS, () -> {
+        runTimer(v, SPEECH_MS, true, () -> {
             Integer nominee = nominatedBy.get(n);
             if (nominee != null) {
                 game.log().add("Игрок " + n + " выставил игрока " + nominee);
@@ -400,7 +438,7 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
         }
         int x = candidates.get(i);
         announcer.say("Игрок " + x + ", у вас тридцать секунд.");
-        showTimer("Оправдательная речь", "Игрок " + x, TIE_SPEECH_MS, "Спасибо.",
+        showTimer("Оправдательная речь", "Игрок " + x, TIE_SPEECH_MS, true, "Спасибо.",
                 () -> tieSpeeches(voting, i + 1));
     }
 
@@ -468,7 +506,7 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
         }
         int x = leaving.get(i);
         announcer.say("Игрок " + x + ", ваша прощальная минута.");
-        showTimer("Прощальная минута", "Игрок " + x + " покидает стол", FAREWELL_MS,
+        showTimer("Прощальная минута", "Игрок " + x + " покидает стол", FAREWELL_MS, true,
                 "Спасибо, игрок " + x + ".", () -> farewell(leaving, i + 1, then));
     }
 
@@ -487,11 +525,8 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
     }
 
     private void nightTurn(List<Integer> order, int i) {
-        if (i >= order.size()) {
-            showMessage("Ночь окончена", "Положите телефон в центр стола.", "Наступает утро", this::morning);
-            return;
-        }
         int n = order.get(i);
+        callPlayer(n);
         showHandoff("Ночной ход " + (i + 1) + " из " + order.size(), n,
                 "Держите телефон так, чтобы экран видели только вы.",
                 "Я игрок " + n, () -> {
@@ -603,10 +638,18 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
         boolean last = i == order.size() - 1;
         long left = MIN_NIGHT_TURN_MS - (SystemClock.elapsedRealtime() - turnStartedAt);
         View v = show(R.layout.screen_message);
+        MaterialButton action = v.findViewById(R.id.action);
+        if (last) {
+            // Утро наступает само: последний игрок кладёт телефон, кнопок не нужно.
+            this.<TextView>find(v, R.id.title).setText("Ночь окончена");
+            this.<TextView>find(v, R.id.text).setText("Положите телефон в центр стола.\nСкоро наступит утро.");
+            action.setVisibility(View.GONE);
+            handler.postDelayed(this::morning, Math.max(left, NIGHT_END_PAUSE_MS));
+            return;
+        }
         this.<TextView>find(v, R.id.title).setText("Ход завершён");
         this.<TextView>find(v, R.id.text).setText("Не показывайте экран соседям.");
-        MaterialButton action = v.findViewById(R.id.action);
-        String label = last ? "Завершить ночь" : "Передать телефон дальше";
+        String label = "Передать телефон дальше";
         action.setOnClickListener(once(() -> nightTurn(order, i + 1)));
         if (left > 0) {
             action.setEnabled(false);
@@ -666,6 +709,11 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
         return v;
     }
 
+    /** Вызов игрока к телефону при раздаче карт и ночью. «Номер» словом — «№» синтез читает ненадёжно. */
+    private void callPlayer(int n) {
+        announcer.say("Игрок номер " + n);
+    }
+
     private void setPhase(String label) {
         phaseLabel.setText(label);
     }
@@ -689,11 +737,12 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
         action.setOnClickListener(once(next));
     }
 
-    private void showTimer(String title, String subtitle, long durationMs, String endPhrase, Runnable next) {
+    private void showTimer(String title, String subtitle, long durationMs, boolean speech,
+                           String endPhrase, Runnable next) {
         View v = show(R.layout.screen_timer);
         this.<TextView>find(v, R.id.title).setText(title);
         this.<TextView>find(v, R.id.subtitle).setText(subtitle);
-        runTimer(v, durationMs, () -> {
+        runTimer(v, durationMs, speech, () -> {
             if (endPhrase != null) {
                 announcer.say(endPhrase);
             }
@@ -701,8 +750,11 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
         });
     }
 
-    /** Запускает отсчёт на экране с полем time и кнопками pause/finish. */
-    private void runTimer(View v, long durationMs, Runnable onDone) {
+    /**
+     * Запускает отсчёт на экране с полем time и кнопками pause/finish.
+     * В речах за 10 секунд до конца звучит «Десять секунд», в остальных фазах — короткий сигнал.
+     */
+    private void runTimer(View v, long durationMs, boolean speech, Runnable onDone) {
         TextView time = v.findViewById(R.id.time);
         MaterialButton pause = v.findViewById(R.id.pause);
         Runnable done = onceRun(() -> {
@@ -718,7 +770,11 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
 
             @Override
             public void onWarning() {
-                announcer.beep();
+                if (speech) {
+                    announcer.say("Десять секунд.");
+                } else {
+                    announcer.beep();
+                }
             }
 
             @Override

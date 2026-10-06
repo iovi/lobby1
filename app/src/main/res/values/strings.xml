@@ -18,6 +18,7 @@
     <string name="resume">Продолжить</string>
     <string name="finish_early">Завершить</string>
     <string name="next">Далее</string>
+    <string name="confirm_nomination">Подтвердить выставление</string>
     <string name="to_menu">В меню</string>
 
     <string name="abort_title">Прервать игру?</string>

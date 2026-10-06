@@ -31,6 +31,13 @@
         android:layout_height="wrap_content"
         android:columnCount="5" />
 
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/confirm"
+        style="@style/MainButton"
+        android:layout_marginTop="12dp"
+        android:enabled="false"
+        android:text="@string/confirm_nomination" />
+
     <View style="@style/Spacer" />
 
     <include layout="@layout/timer_controls" />

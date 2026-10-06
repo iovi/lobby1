@@ -11,7 +11,9 @@ import android.speech.tts.UtteranceProgressListener;
 import android.util.Log;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 
 /**
@@ -31,11 +33,27 @@ public final class Announcer {
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Listener listener;
-    private final List<String> pending = new ArrayList<>();
+    /** Предел ожидания конца фразы, после которого игра продолжается без него. */
+    private static final long DONE_TIMEOUT_MS = 15_000;
+
+    private static final class Pending {
+        final String text;
+        final Runnable onDone;
+
+        Pending(String text, Runnable onDone) {
+            this.text = text;
+            this.onDone = onDone;
+        }
+    }
+
+    private final List<Pending> pending = new ArrayList<>();
+    /** Колбэки окончания фраз по id высказывания. */
+    private final Map<String, Runnable> callbacks = new HashMap<>();
     private final TextToSpeech tts;
     private ToneGenerator tones;
     private boolean ready = false;
     private boolean failed = false;
+    private boolean shutDown = false;
     private int activeUtterances = 0;
     private int utteranceSeq = 0;
 
@@ -50,6 +68,9 @@ public final class Announcer {
     }
 
     private void onInit(int status) {
+        if (shutDown) {
+            return;
+        }
         if (status != TextToSpeech.SUCCESS) {
             fail();
             return;
@@ -66,75 +87,103 @@ public final class Announcer {
 
             @Override
             public void onDone(String id) {
-                main.post(Announcer.this::utteranceFinished);
+                main.post(() -> utteranceFinished(id));
             }
 
             @Override
             public void onError(String id) {
-                main.post(Announcer.this::utteranceFinished);
+                main.post(() -> utteranceFinished(id));
             }
 
             @Override
             public void onStop(String id, boolean interrupted) {
-                main.post(Announcer.this::utteranceFinished);
+                main.post(() -> utteranceFinished(id));
             }
         });
         ready = true;
-        for (String text : pending) {
-            speak(text, TextToSpeech.QUEUE_ADD);
+        for (Pending p : pending) {
+            speak(p.text, p.onDone);
         }
         pending.clear();
     }
 
     private void fail() {
         failed = true;
+        // Голоса не будет — те, кто ждал конца фразы, продолжают сразу.
+        for (Pending p : pending) {
+            if (p.onDone != null) {
+                p.onDone.run();
+            }
+        }
         pending.clear();
         listener.onVoiceUnavailable();
     }
 
     /** Добавляет фразу в очередь объявлений. */
     public void say(String text) {
+        say(text, null);
+    }
+
+    /**
+     * Добавляет фразу в очередь и вызывает onDone (в главном потоке), когда она прозвучит.
+     * Если голос недоступен или движок не ответил за {@link #DONE_TIMEOUT_MS}, onDone
+     * всё равно вызывается — игра не должна зависнуть из-за синтеза речи.
+     */
+    public void say(String text, Runnable onDone) {
+        Runnable guarded = onDone == null ? null : onceWithTimeout(onDone);
         if (failed || text == null || text.isEmpty()) {
+            if (guarded != null) {
+                main.post(guarded);
+            }
             return;
         }
         if (!ready) {
-            pending.add(text);
+            pending.add(new Pending(text, guarded));
             return;
         }
-        speak(text, TextToSpeech.QUEUE_ADD);
+        speak(text, guarded);
     }
 
-    /** Прерывает текущие объявления и сразу произносит фразу. */
-    public void sayNow(String text) {
-        if (failed || text == null || text.isEmpty()) {
-            return;
-        }
-        if (!ready) {
-            pending.clear();
-            pending.add(text);
-            return;
-        }
-        speak(text, TextToSpeech.QUEUE_FLUSH);
+    private Runnable onceWithTimeout(Runnable action) {
+        boolean[] done = {false};
+        Runnable guarded = () -> {
+            if (!done[0]) {
+                done[0] = true;
+                action.run();
+            }
+        };
+        main.postDelayed(guarded, DONE_TIMEOUT_MS);
+        return guarded;
     }
 
-    private void speak(String text, int mode) {
+    private void speak(String text, Runnable onDone) {
         String id = "u" + (utteranceSeq++);
-        // При QUEUE_FLUSH сброшенные фразы отчитаются через onStop, так что счётчик сойдётся.
-        if (tts.speak(text, mode, new Bundle(), id) == TextToSpeech.SUCCESS) {
+        if (tts.speak(text, TextToSpeech.QUEUE_ADD, new Bundle(), id) == TextToSpeech.SUCCESS) {
+            if (onDone != null) {
+                callbacks.put(id, onDone);
+            }
             activeUtterances++;
             if (activeUtterances == 1) {
                 listener.onSpeakingChanged(true);
             }
+        } else if (onDone != null) {
+            main.post(onDone);
         }
     }
 
-    private void utteranceFinished() {
-        if (activeUtterances == 0) {
+    private void utteranceFinished(String id) {
+        if (shutDown) {
             return;
         }
-        activeUtterances--;
-        if (activeUtterances == 0) {
-            listener.onSpeakingChanged(false);
+        Runnable onDone = callbacks.remove(id);
+        if (activeUtterances > 0) {
+            activeUtterances--;
+            if (activeUtterances == 0) {
+                listener.onSpeakingChanged(false);
+            }
+        }
+        if (onDone != null) {
+            onDone.run();
         }
     }
 
@@ -153,6 +202,10 @@ public final class Announcer {
     }
 
     public void shutdown() {
+        // Ждущие продолжения после закрытия экрана не нужны: onStop от tts.stop() придёт позже.
+        shutDown = true;
+        callbacks.clear();
+        pending.clear();
         main.removeCallbacksAndMessages(null);
         tts.stop();
         tts.shutdown();

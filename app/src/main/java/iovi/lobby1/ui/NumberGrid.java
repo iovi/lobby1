@@ -38,6 +38,12 @@ final class NumberGrid {
             b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26);
             b.setInsetTop(0);
             b.setInsetBottom(0);
+            // Стандартные отступы MaterialButton не дают «10» уместиться в узкой кнопке.
+            b.setPadding(0, 0, 0, 0);
+            b.setMinWidth(0);
+            b.setMinimumWidth(0);
+            b.setMaxLines(1);
+            b.setSingleLine(true);
             b.setCornerRadius(dp(context, 12));
             b.setBackgroundTintList(idle);
             boolean on = enabled.contains(n);
