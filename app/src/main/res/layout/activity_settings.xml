@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Screen"
+    android:orientation="vertical"
+    android:fitsSystemWindows="true"
+    android:gravity="top">
+
+    <TextView
+        style="@style/Title"
+        android:layout_marginTop="16dp"
+        android:text="@string/settings_music_title" />
+
+    <TextView
+        style="@style/Body"
+        android:layout_marginTop="12dp"
+        android:text="@string/settings_music_hint"
+        android:textSize="15sp" />
+
+    <TextView
+        android:id="@+id/musicName"
+        style="@style/Body"
+        android:layout_marginTop="32dp"
+        android:background="@color/surface"
+        android:padding="16dp"
+        android:textColor="@color/text_primary" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/pick"
+        style="@style/MainButton"
+        android:layout_marginTop="24dp"
+        android:text="@string/settings_pick" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/preview"
+            style="@style/SecondaryButton"
+            android:layout_marginEnd="6dp"
+            android:text="@string/settings_preview" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/clear"
+            style="@style/SecondaryButton"
+            android:layout_marginStart="6dp"
+            android:text="@string/settings_clear" />
+    </LinearLayout>
+</LinearLayout>

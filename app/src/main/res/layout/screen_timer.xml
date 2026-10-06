@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Screen"
+    android:orientation="vertical">
+
+    <View style="@style/Spacer" />
+
+    <TextView
+        android:id="@+id/title"
+        style="@style/Title" />
+
+    <TextView
+        android:id="@+id/subtitle"
+        style="@style/Body"
+        android:layout_marginTop="8dp" />
+
+    <TextView
+        android:id="@+id/time"
+        style="@style/BigNumber"
+        android:layout_marginTop="16dp" />
+
+    <View style="@style/Spacer" />
+
+    <include layout="@layout/timer_controls" />
+</LinearLayout>

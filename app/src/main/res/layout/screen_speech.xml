@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Screen"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/title"
+        style="@style/Title" />
+
+    <TextView
+        android:id="@+id/time"
+        style="@style/BigNumber"
+        android:textSize="80sp" />
+
+    <TextView
+        android:id="@+id/nominees"
+        style="@style/Body"
+        android:textColor="@color/text_primary" />
+
+    <View style="@style/Spacer" />
+
+    <TextView
+        android:id="@+id/hint"
+        style="@style/Body"
+        android:layout_marginBottom="8dp"
+        android:textSize="15sp" />
+
+    <GridLayout
+        android:id="@+id/grid"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:columnCount="5" />
+
+    <View style="@style/Spacer" />
+
+    <include layout="@layout/timer_controls" />
+</LinearLayout>

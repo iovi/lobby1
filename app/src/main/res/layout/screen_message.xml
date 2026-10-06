@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Screen"
+    android:orientation="vertical">
+
+    <View style="@style/Spacer" />
+
+    <TextView
+        android:id="@+id/title"
+        style="@style/Title" />
+
+    <TextView
+        android:id="@+id/text"
+        style="@style/Body"
+        android:layout_marginTop="16dp"
+        android:textSize="20sp" />
+
+    <View style="@style/Spacer" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/action"
+        style="@style/MainButton" />
+</LinearLayout>

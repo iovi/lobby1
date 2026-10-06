@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Screen"
+    android:orientation="vertical"
+    android:fitsSystemWindows="true">
+
+    <View style="@style/Spacer" />
+
+    <TextView
+        style="@style/Title"
+        android:text="@string/app_name"
+        android:textSize="36sp" />
+
+    <TextView
+        style="@style/Body"
+        android:layout_marginTop="8dp"
+        android:text="@string/main_subtitle" />
+
+    <View style="@style/Spacer" />
+
+    <TextView
+        android:id="@+id/musicStatus"
+        style="@style/Body"
+        android:layout_marginBottom="16dp"
+        android:textSize="15sp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/newGame"
+        style="@style/MainButton"
+        android:text="@string/new_game" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/settings"
+        style="@style/MainButton"
+        android:layout_marginTop="12dp"
+        android:backgroundTint="@color/surface"
+        android:text="@string/settings" />
+</LinearLayout>

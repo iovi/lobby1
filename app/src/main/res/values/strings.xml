@@ -1,0 +1,28 @@
+<resources>
+    <string name="app_name">Судья мафии</string>
+    <string name="main_subtitle">Ведущий для спортивной мафии на 10 игроков</string>
+    <string name="new_game">Новая игра</string>
+    <string name="settings">Настройки</string>
+    <string name="music_none">Ночная музыка не выбрана</string>
+    <string name="music_selected">Ночная музыка: %1$s</string>
+
+    <string name="settings_music_title">Музыка для ночи</string>
+    <string name="settings_music_hint">Играет во время раздачи карт, договорки, свободной посадки и игровых ночей. Пока звучат объявления, музыка приглушается.</string>
+    <string name="settings_pick">Выбрать файл</string>
+    <string name="settings_preview">Прослушать</string>
+    <string name="settings_stop">Остановить</string>
+    <string name="settings_clear">Убрать музыку</string>
+    <string name="music_error">Не удалось воспроизвести выбранный музыкальный файл</string>
+
+    <string name="pause">Пауза</string>
+    <string name="resume">Продолжить</string>
+    <string name="finish_early">Завершить</string>
+    <string name="next">Далее</string>
+    <string name="to_menu">В меню</string>
+
+    <string name="abort_title">Прервать игру?</string>
+    <string name="abort_message">Текущая партия будет потеряна.</string>
+    <string name="abort_yes">Прервать</string>
+    <string name="abort_no">Продолжить игру</string>
+    <string name="voice_unavailable">Русский голос недоступен: объявления будут только на экране. Установите русский язык в настройках синтеза речи Android.</string>
+</resources>
