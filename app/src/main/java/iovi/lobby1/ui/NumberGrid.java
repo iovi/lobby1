@@ -10,6 +10,7 @@ import androidx.core.content.ContextCompat;
 import com.google.android.material.button.MaterialButton;
 
 import java.util.Collection;
+import java.util.Collections;
 
 import iovi.lobby1.R;
 import iovi.lobby1.game.Game;
@@ -44,6 +45,7 @@ final class NumberGrid {
             b.setMinimumWidth(0);
             b.setMaxLines(1);
             b.setSingleLine(true);
+            b.setLetterSpacing(0f);
             b.setCornerRadius(dp(context, 12));
             b.setBackgroundTintList(idle);
             boolean on = enabled.contains(n);
@@ -73,17 +75,27 @@ final class NumberGrid {
 
     /** Подсвечивает выбранный номер; 0 — снять выбор. */
     void select(int number) {
+        select(Collections.singleton(number));
+    }
+
+    /** Подсвечивает несколько выбранных номеров. */
+    void select(Collection<Integer> numbers) {
         for (int n = 1; n <= Game.PLAYER_COUNT; n++) {
-            buttons[n].setBackgroundTintList(n == number ? selected : idle);
+            buttons[n].setBackgroundTintList(numbers.contains(n) ? selected : idle);
         }
     }
 
     /** Фиксирует выбор: подсвечивает номер и запрещает дальнейшие нажатия. */
     void lock(int number) {
-        select(number);
+        lock(Collections.singleton(number));
+    }
+
+    /** Фиксирует выбор нескольких номеров. */
+    void lock(Collection<Integer> numbers) {
+        select(numbers);
         for (int n = 1; n <= Game.PLAYER_COUNT; n++) {
             buttons[n].setEnabled(false);
-            buttons[n].setAlpha(n == number ? 1f : 0.25f);
+            buttons[n].setAlpha(numbers.contains(n) ? 1f : 0.25f);
         }
     }
 

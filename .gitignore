@@ -38,3 +38,6 @@ keystore.properties
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Личные настройки Claude Code
+.claude/settings.local.json

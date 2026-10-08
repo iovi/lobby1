@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    style="@style/Screen"
-    android:orientation="vertical"
+<!-- Системные отступы — на обёртке: fitsSystemWindows заменяет padding самого элемента. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
     android:fitsSystemWindows="true">
+
+<LinearLayout
+    style="@style/Screen"
+    android:orientation="vertical">
 
     <View style="@style/Spacer" />
 
@@ -36,3 +41,4 @@
         android:backgroundTint="@color/surface"
         android:text="@string/settings" />
 </LinearLayout>
+</FrameLayout>

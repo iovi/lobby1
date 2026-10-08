@@ -55,8 +55,10 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
      * проверяет — выравниваем время, чтобы по нему нельзя было вычислить роль.
      */
     private static final long MIN_NIGHT_TURN_MS = 8_000;
-    /** Пауза после последнего ночного хода — положить телефон в центр стола. */
+    /** Пауза после последнего ночного хода — положить телефон на стол. */
     private static final long NIGHT_END_PAUSE_MS = 5_000;
+    /** Время на поднятие рук между «кто за X?» и «Спасибо». */
+    private static final long VOTE_WINDOW_MS = 1_000;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final PhaseTimer timer = new PhaseTimer();
@@ -74,6 +76,8 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
     /** Ночные выстрелы: номер стрелявшего → цель. */
     private final Map<Integer, Integer> shots = new HashMap<>();
     private long turnStartedAt;
+    /** Строка лучшего хода для итога партии; null — лучшего хода не было. */
+    private String bestMoveSummary;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -184,8 +188,12 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
             if (n < Game.PLAYER_COUNT) {
                 passAfterCard(n + 1);
             } else {
-                showMessage("Карты розданы", "Положите телефон в центр стола.",
-                        "Начать договорку", this::mafiaAgreement);
+                // Договорка начинается сама: последний игрок кладёт телефон, кнопок не нужно.
+                View done = show(R.layout.screen_message);
+                this.<TextView>find(done, R.id.title).setText("Карты выданы");
+                this.<TextView>find(done, R.id.text).setText("Положите телефон на стол.");
+                done.findViewById(R.id.action).setVisibility(View.GONE);
+                handler.postDelayed(this::mafiaAgreement, CARD_PASS_PAUSE_MS);
             }
         }, CARD_SHOW_MS);
     }
@@ -367,18 +375,40 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
             used += votes[k];
         }
         int remaining = voting.voters() - used;
+        int x = candidates.get(i);
+        String title = voting.isRevote() ? "Переголосование" : "Голосование";
+        String question = "Кто за то, чтобы игрок " + x + " покинул стол?";
         if (i == candidates.size() - 1) {
-            votes[i] = remaining;
-            finishVoteRound(voting, votes);
+            // Не проголосовавшие отдают голос последней кандидатуре — её тоже называем, но голоса не вводим.
+            View v = show(R.layout.screen_message);
+            this.<TextView>find(v, R.id.title).setText(title);
+            this.<TextView>find(v, R.id.text).setText(question + "\n\nОставшиеся голоса: " + remaining);
+            v.findViewById(R.id.action).setVisibility(View.GONE);
+            announceCandidate(x, () -> {
+                votes[i] = remaining;
+                finishVoteRound(voting, votes);
+            });
             return;
         }
-        int x = candidates.get(i);
-        String question = "Кто за то, чтобы игрок " + x + " покинул стол?";
-        announcer.say(question);
-        showVoteInput(voting.isRevote() ? "Переголосование" : "Голосование", question, remaining, value -> {
+        View v = showVoteInput(title, question, remaining, value -> {
             votes[i] = value;
             voteRound(voting, votes, i + 1);
         });
+        // Число голосов вводится после «Спасибо» — к этому моменту голосование за кандидатуру закончено.
+        View action = v.findViewById(R.id.action);
+        action.setEnabled(false);
+        announceCandidate(x, () -> action.setEnabled(true));
+    }
+
+    /** «X, кто за X?», через секунду «Спасибо.»; thanked вызывается после «Спасибо». */
+    private void announceCandidate(int x, Runnable thanked) {
+        announceVote(x + ", кто за " + x + "?", thanked);
+    }
+
+    /** Вопрос голосования, через секунду «Спасибо.»; thanked вызывается после «Спасибо». */
+    private void announceVote(String question, Runnable thanked) {
+        announcer.say(question,
+                () -> handler.postDelayed(() -> announcer.say("Спасибо.", thanked), VOTE_WINDOW_MS));
     }
 
     private void finishVoteRound(Voting voting, int[] votes) {
@@ -446,8 +476,7 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
         List<Integer> candidates = new ArrayList<>(voting.candidates());
         String list = Game.joinNumbers(candidates);
         String question = "Кто за то, чтобы все игроки " + list + " покинули стол?";
-        announcer.say(question);
-        showVoteInput("Поднять всех?", question, voting.voters(), value -> {
+        View v = showVoteInput("Поднять всех?", question, voting.voters(), value -> {
             boolean lifted = voting.submitLiftAll(value);
             String tally = "За — " + votesText(value) + " из " + voting.voters() + ".";
             game.log().add("Поднять всех (" + list + "): за " + value + " из " + voting.voters()
@@ -463,6 +492,9 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
                 showMessage("Итоги голосования", tally + "\n\n" + text, "Наступает ночь", this::startNight);
             }
         });
+        View action = v.findViewById(R.id.action);
+        action.setEnabled(false);
+        announceVote(question, () -> action.setEnabled(true));
     }
 
     private static String votesText(int n) {
@@ -642,7 +674,7 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
         if (last) {
             // Утро наступает само: последний игрок кладёт телефон, кнопок не нужно.
             this.<TextView>find(v, R.id.title).setText("Ночь окончена");
-            this.<TextView>find(v, R.id.text).setText("Положите телефон в центр стола.\nСкоро наступит утро.");
+            this.<TextView>find(v, R.id.text).setText("Положите телефон на стол.\nСкоро наступит утро.");
             action.setVisibility(View.GONE);
             handler.postDelayed(this::morning, Math.max(left, NIGHT_END_PAUSE_MS));
             return;
@@ -676,9 +708,81 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
             game.log().add("Убит игрок " + killed);
             String text = "Ночью убит игрок " + killed + ".";
             announcer.say("Наступает утро. " + text);
-            showMessage("Утро", text, "Прощальная минута",
-                    () -> farewells(Collections.singletonList(killed), this::startDay));
+            Runnable farewell = () -> farewells(Collections.singletonList(killed), this::startDay);
+            if (game.dayNumber() == 1) {
+                // Убитый в первую ночь перед прощальной речью делает лучший ход.
+                showMessage("Утро", text, "Лучший ход", () -> bestMove(killed, farewell));
+            } else {
+                showMessage("Утро", text, "Прощальная минута", farewell);
+            }
         }
+    }
+
+    /** Лучший ход: убитый в первую ночь называет трёх игроков, которых считает мафией. */
+    private void bestMove(int n, Runnable then) {
+        announcer.say("Игрок " + n + ", ваш лучший ход.");
+        showHandoff("Лучший ход", n,
+                "Выберите трёх игроков, которых считаете мафией.\nПосле подтверждения изменить выбор нельзя.",
+                "Сделать лучший ход", () -> showBestMove(n, then));
+    }
+
+    private void showBestMove(int n, Runnable then) {
+        View v = show(R.layout.screen_night);
+        this.<TextView>find(v, R.id.role).setText("Игрок " + n);
+        this.<TextView>find(v, R.id.title).setText("Лучший ход");
+        this.<TextView>find(v, R.id.hint).setText("Отметьте три номера предполагаемой мафии.");
+        MaterialButton action = v.findViewById(R.id.action);
+        TextView result = v.findViewById(R.id.result);
+
+        List<Integer> candidates = new ArrayList<>();
+        for (int k = 1; k <= Game.PLAYER_COUNT; k++) {
+            if (k != n) {
+                candidates.add(k);
+            }
+        }
+        List<Integer> picked = new ArrayList<>();
+        NumberGrid grid = new NumberGrid(v.findViewById(R.id.grid), candidates);
+        Runnable refresh = () -> {
+            grid.select(picked);
+            action.setEnabled(picked.size() == 3);
+            action.setText(picked.size() == 3
+                    ? "Подтвердить: " + Game.joinNumbers(sorted(picked))
+                    : "Выбрано " + picked.size() + " из 3");
+        };
+        grid.setListener(number -> {
+            if (picked.contains(number)) {
+                picked.remove(Integer.valueOf(number));
+            } else if (picked.size() < 3) {
+                picked.add(number);
+            }
+            refresh.run();
+        });
+        refresh.run();
+
+        action.setOnClickListener(once(() -> {
+            String list = Game.joinNumbers(sorted(picked));
+            grid.lock(picked);
+            game.log().add("Лучший ход игрока " + n + ": " + list);
+            int black = 0;
+            for (int x : picked) {
+                if (game.player(x).role().isBlack()) {
+                    black++;
+                }
+            }
+            bestMoveSummary = "Лучший ход игрока " + n + ": " + list
+                    + " — угадано мафии: " + black + " из 3";
+            announcer.say("Лучший ход игрока " + n + ": номера " + list + ".");
+            result.setVisibility(View.VISIBLE);
+            result.setText(list);
+            action.setText("Прощальная минута");
+            action.setOnClickListener(once(then));
+        }));
+    }
+
+    private static List<Integer> sorted(List<Integer> numbers) {
+        List<Integer> copy = new ArrayList<>(numbers);
+        Collections.sort(copy);
+        return copy;
     }
 
     // ───────────────────────────── Конец игры ─────────────────────────────
@@ -689,6 +793,9 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
         String title = winner == Game.Winner.MAFIA ? "Победила мафия" : "Победили мирные жители";
         game.log().section("Итог");
         game.log().add(title);
+        if (bestMoveSummary != null) {
+            game.log().add(bestMoveSummary);
+        }
         announcer.say("Игра окончена. " + title + "!");
         setPhase("Игра окончена");
         View v = show(R.layout.screen_game_over);
@@ -794,7 +901,7 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
         v.findViewById(R.id.finish).setOnClickListener(b -> done.run());
     }
 
-    private void showVoteInput(String title, String question, int max, IntConsumer onSubmit) {
+    private View showVoteInput(String title, String question, int max, IntConsumer onSubmit) {
         View v = show(R.layout.screen_vote);
         this.<TextView>find(v, R.id.title).setText(title);
         this.<TextView>find(v, R.id.question).setText(question);
@@ -819,6 +926,7 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
         });
         refresh.run();
         v.findViewById(R.id.action).setOnClickListener(once(() -> onSubmit.accept(count[0])));
+        return v;
     }
 
     // ───────────────────────────── Утилиты ─────────────────────────────
