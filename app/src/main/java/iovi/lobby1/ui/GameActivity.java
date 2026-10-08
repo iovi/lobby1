@@ -573,7 +573,8 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
                 pickShot(n, done);
                 break;
             case DON:
-                pickShot(n, () -> check(n, "Проверка дона",
+                // В первую ночь дон не может проверить того, в кого стрелял.
+                pickShot(n, () -> check(n, game.dayNumber() == 1 ? shots.get(n) : 0, "Проверка дона",
                         "Выберите игрока, которого проверяете на шерифство.",
                         target -> game.player(target).role() == Role.SHERIFF
                                 ? "Игрок " + target + " — ШЕРИФ"
@@ -581,7 +582,7 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
                         "Дон проверил", done));
                 break;
             case SHERIFF:
-                check(n, "Проверка шерифа",
+                check(n, 0, "Проверка шерифа",
                         "Выберите игрока, которого проверяете.",
                         target -> game.player(target).role().isBlack()
                                 ? "Игрок " + target + " — МАФИЯ"
@@ -626,7 +627,9 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
         String of(int target);
     }
 
-    private void check(int n, String title, String hint, Verdict verdict, String logPrefix, Runnable next) {
+    /** Ночная проверка; excluded — номер, который проверять нельзя (0 — без ограничения). */
+    private void check(int n, int excluded, String title, String hint, Verdict verdict, String logPrefix,
+                       Runnable next) {
         View v = nightScreen(n, title, hint);
         MaterialButton action = v.findViewById(R.id.action);
         action.setText("Проверить");
@@ -637,7 +640,7 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
 
         List<Integer> checkable = new ArrayList<>();
         for (int k = 1; k <= Game.PLAYER_COUNT; k++) {
-            if (k != n) {
+            if (k != n && k != excluded) {
                 checkable.add(k);
             }
         }

@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Судья мафии</string>
+    <string name="app_name">Лобби.Мафия</string>
     <string name="main_subtitle">Ведущий для спортивной мафии на 10 игроков</string>
     <string name="new_game">Новая игра</string>
     <string name="settings">Настройки</string>
