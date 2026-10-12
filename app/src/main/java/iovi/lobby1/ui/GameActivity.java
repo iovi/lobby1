@@ -242,7 +242,7 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
             }
             pause.setEnabled(true);
             finish.setEnabled(true);
-            runTimer(v, AGREEMENT_MS, false, () -> {
+            runTimer(v, AGREEMENT_MS, true, () -> {
                 announcer.say("Мафия засыпает.");
                 freeSeating();
             });
@@ -315,13 +315,13 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
         }));
         nomineesView.setText(nomineesText());
 
-        announcer.say("Игрок " + n + ", ваша речь.");
+        announcer.say("Игрок " + n);
         runTimer(v, SPEECH_MS, true, () -> {
             Integer nominee = nominatedBy.get(n);
             if (nominee != null) {
                 game.log().add("Игрок " + n + " выставил игрока " + nominee);
             }
-            announcer.say("Спасибо, игрок " + n + ".");
+            announcer.say("Спасибо, время.");
             speech(order, i + 1);
         });
     }
@@ -862,7 +862,7 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
 
     /**
      * Запускает отсчёт на экране с полем time и кнопками pause/finish.
-     * В речах за 10 секунд до конца звучит «Десять секунд», в остальных фазах — короткий сигнал.
+     * В речах и договорке за 10 секунд до конца звучит «Десять секунд», в остальных фазах — короткий сигнал.
      */
     private void runTimer(View v, long durationMs, boolean speech, Runnable onDone) {
         TextView time = v.findViewById(R.id.time);

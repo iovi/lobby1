@@ -35,6 +35,10 @@ public final class Announcer {
     private final Listener listener;
     /** Предел ожидания конца фразы, после которого игра продолжается без него. */
     private static final long DONE_TIMEOUT_MS = 15_000;
+    /** Знак ударения (U+0301) ставится после ударной гласной; только для синтеза, не для экрана. */
+    private static final String[][] STRESS = {
+            {"договорк", "догово́рк"},
+    };
 
     private static final class Pending {
         final String text;
@@ -156,9 +160,16 @@ public final class Announcer {
         return guarded;
     }
 
+    private static String withStress(String text) {
+        for (String[] s : STRESS) {
+            text = text.replace(s[0], s[1]);
+        }
+        return text;
+    }
+
     private void speak(String text, Runnable onDone) {
         String id = "u" + (utteranceSeq++);
-        if (tts.speak(text, TextToSpeech.QUEUE_ADD, new Bundle(), id) == TextToSpeech.SUCCESS) {
+        if (tts.speak(withStress(text), TextToSpeech.QUEUE_ADD, new Bundle(), id) == TextToSpeech.SUCCESS) {
             if (onDone != null) {
                 callbacks.put(id, onDone);
             }
