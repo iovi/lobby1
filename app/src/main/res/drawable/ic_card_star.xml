@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Пятиконечная звезда на карте шерифа. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@color/white"
+        android:pathData="M12,2.6 L14.25,9.51 L21.51,9.51 L15.63,13.78 L17.88,20.69 L12,16.42 L6.12,20.69 L8.37,13.78 L2.49,9.51 L9.75,9.51 Z" />
+</vector>

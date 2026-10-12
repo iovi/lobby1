@@ -24,11 +24,13 @@
             android:textColor="@color/white"
             android:textSize="40sp" />
 
-        <TextView
-            android:id="@+id/description"
-            style="@style/Body"
-            android:layout_marginTop="16dp"
-            android:textColor="@color/white" />
+        <ImageView
+            android:id="@+id/roleIcon"
+            android:layout_width="200dp"
+            android:layout_height="200dp"
+            android:layout_marginTop="32dp"
+            android:importantForAccessibility="no"
+            android:visibility="gone" />
     </LinearLayout>
 
     <ProgressBar

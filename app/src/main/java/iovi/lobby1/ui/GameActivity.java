@@ -11,6 +11,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.GridLayout;
+import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -177,7 +178,13 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
 
         this.<TextView>find(v, R.id.playerNumber).setText("Игрок " + n);
         this.<TextView>find(v, R.id.role).setText(role.title());
-        this.<TextView>find(v, R.id.description).setText(describe(role));
+        int icon = role == Role.SHERIFF ? R.drawable.ic_card_star
+                : role == Role.DON ? R.drawable.ic_card_ring : 0;
+        if (icon != 0) {
+            ImageView roleIcon = v.findViewById(R.id.roleIcon);
+            roleIcon.setImageResource(icon);
+            roleIcon.setVisibility(View.VISIBLE);
+        }
 
         ProgressBar progress = v.findViewById(R.id.progress);
         ObjectAnimator.ofInt(progress, "progress", progress.getMax(), 0)
@@ -205,20 +212,6 @@ public class GameActivity extends AppCompatActivity implements Announcer.Listene
         v.findViewById(R.id.text).setVisibility(View.GONE);
         v.findViewById(R.id.action).setVisibility(View.GONE);
         handler.postDelayed(() -> dealCard(next), CARD_PASS_PAUSE_MS);
-    }
-
-    private static String describe(Role role) {
-        switch (role) {
-            case SHERIFF:
-                return "Красный игрок. Каждую ночь проверяйте одного игрока: мафия он или нет.";
-            case MAFIA:
-                return "Чёрный игрок. Ночью стреляйте вместе с доном и другой мафией.";
-            case DON:
-                return "Глава мафии. Ночью стреляйте вместе с мафией и ищите шерифа.";
-            case CIVILIAN:
-            default:
-                return "Красный игрок. Ночью у вас нет действий — найдите мафию днём.";
-        }
     }
 
     // ─────────────────────── Нулевая ночь: договорка и посадка ───────────────────────
