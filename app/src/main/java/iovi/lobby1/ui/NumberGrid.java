@@ -10,7 +10,6 @@ import androidx.core.content.ContextCompat;
 import com.google.android.material.button.MaterialButton;
 
 import java.util.Collection;
-import java.util.Collections;
 
 import iovi.lobby1.R;
 import iovi.lobby1.game.Game;
@@ -73,24 +72,14 @@ final class NumberGrid {
         this.listener = listener;
     }
 
-    /** Подсвечивает выбранный номер; 0 — снять выбор. */
-    void select(int number) {
-        select(Collections.singleton(number));
-    }
-
-    /** Подсвечивает несколько выбранных номеров. */
+    /** Подсвечивает выбранные номера. */
     void select(Collection<Integer> numbers) {
         for (int n = 1; n <= Game.PLAYER_COUNT; n++) {
             buttons[n].setBackgroundTintList(numbers.contains(n) ? selected : idle);
         }
     }
 
-    /** Фиксирует выбор: подсвечивает номер и запрещает дальнейшие нажатия. */
-    void lock(int number) {
-        lock(Collections.singleton(number));
-    }
-
-    /** Фиксирует выбор нескольких номеров. */
+    /** Фиксирует выбор: подсвечивает номера и запрещает дальнейшие нажатия. */
     void lock(Collection<Integer> numbers) {
         select(numbers);
         for (int n = 1; n <= Game.PLAYER_COUNT; n++) {

@@ -16,11 +16,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Locale;
 
+import iovi.lobby1.flow.Voice;
+import iovi.lobby1.text.Texts;
+
 /**
  * Голос судьи: озвучивает объявления через системный синтез речи (русский язык)
  * и подаёт короткие звуковые сигналы. Сообщает, когда говорит, — чтобы приглушать музыку.
  */
-public final class Announcer {
+public final class Announcer implements Voice {
     private static final String TAG = "Announcer";
 
     public interface Listener {
@@ -35,10 +38,8 @@ public final class Announcer {
     private final Listener listener;
     /** Предел ожидания конца фразы, после которого игра продолжается без него. */
     private static final long DONE_TIMEOUT_MS = 15_000;
-    /** Знак ударения (U+0301) ставится после ударной гласной; только для синтеза, не для экрана. */
-    private static final String[][] STRESS = {
-            {"договорк", "догово́рк"},
-    };
+    /** Ударения для синтеза (ключи stress.* в texts.properties): часть слова → она же со знаком ударения. */
+    private static final Map<String, String> STRESS = Texts.withPrefix("stress.");
 
     private static final class Pending {
         final String text;
@@ -124,6 +125,7 @@ public final class Announcer {
     }
 
     /** Добавляет фразу в очередь объявлений. */
+    @Override
     public void say(String text) {
         say(text, null);
     }
@@ -133,6 +135,7 @@ public final class Announcer {
      * Если голос недоступен или движок не ответил за {@link #DONE_TIMEOUT_MS}, onDone
      * всё равно вызывается — игра не должна зависнуть из-за синтеза речи.
      */
+    @Override
     public void say(String text, Runnable onDone) {
         Runnable guarded = onDone == null ? null : onceWithTimeout(onDone);
         if (failed || text == null || text.isEmpty()) {
@@ -161,8 +164,8 @@ public final class Announcer {
     }
 
     private static String withStress(String text) {
-        for (String[] s : STRESS) {
-            text = text.replace(s[0], s[1]);
+        for (Map.Entry<String, String> s : STRESS.entrySet()) {
+            text = text.replace(s.getKey(), s.getValue());
         }
         return text;
     }
@@ -199,6 +202,7 @@ public final class Announcer {
     }
 
     /** Короткий сигнал — например, «осталось 10 секунд». */
+    @Override
     public void beep() {
         if (tones != null) {
             tones.startTone(ToneGenerator.TONE_PROP_BEEP, 150);
@@ -206,6 +210,7 @@ public final class Announcer {
     }
 
     /** Длинный сигнал окончания отведённого времени. */
+    @Override
     public void endSignal() {
         if (tones != null) {
             tones.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 600);

@@ -1,22 +1,23 @@
 package iovi.lobby1.game;
 
+import iovi.lobby1.text.Texts;
+
 /** Игровая роль. Мафия и дон — «чёрные», мирные и шериф — «красные». */
 public enum Role {
-    CIVILIAN("Мирный житель", false),
-    SHERIFF("Шериф", false),
-    MAFIA("Мафия", true),
-    DON("Дон мафии", true);
+    CIVILIAN(false),
+    SHERIFF(false),
+    MAFIA(true),
+    DON(true);
 
-    private final String title;
     private final boolean black;
 
-    Role(String title, boolean black) {
-        this.title = title;
+    Role(boolean black) {
         this.black = black;
     }
 
+    /** Название роли из texts.properties (ключ role.ИМЯ). */
     public String title() {
-        return title;
+        return Texts.get("role." + name());
     }
 
     public boolean isBlack() {

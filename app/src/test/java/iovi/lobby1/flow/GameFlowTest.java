@@ -1,0 +1,511 @@
+package iovi.lobby1.flow;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import org.junit.Test;
+
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.IntConsumer;
+
+import iovi.lobby1.game.Game;
+import iovi.lobby1.game.Role;
+import iovi.lobby1.text.Texts;
+
+/**
+ * Партия целиком через {@link GameFlow} с поддельным интерфейсом и виртуальным временем:
+ * бот нажимает кнопки, как игроки за столом.
+ */
+public class GameFlowTest {
+    private static final List<Role> ROLES = Arrays.asList(
+            Role.DON, Role.MAFIA, Role.MAFIA, Role.SHERIFF,
+            Role.CIVILIAN, Role.CIVILIAN, Role.CIVILIAN, Role.CIVILIAN, Role.CIVILIAN, Role.CIVILIAN);
+
+    /**
+     * День 1: выставлен один 5 — голосования нет. Ночь 1: мафия убивает 6, лучший ход 1, 2, 3.
+     * День 2: выставлены 7, 8, 9; дважды поровну (3/3/3) → «поднять всех», 5 голосов «за» —
+     * уходят трое, за столом 3 чёрных и 3 красных: победа мафии.
+     */
+    @Test
+    public void fullGameWithTieAndLiftAll() {
+        Map<Integer, Map<Integer, Integer>> nominations = new HashMap<>();
+        nominations.put(1, map(1, 5));
+        nominations.put(2, map(2, 7, 3, 8, 4, 9));
+        Table table = new Table(nominations, Arrays.asList(3, 3, 3, 3, 5), 6);
+        table.play();
+
+        String log = table.game.log().toString();
+        assertTrue(log, log.contains("Голосование не проводилось"));
+        assertTrue(log, log.contains("Дон мафии (игрок 1) стреляет в игрока 6"));
+        assertTrue(log, log.contains("Дон проверил игрока 2: не шериф"));
+        assertTrue(log, log.contains("Шериф проверил игрока 1: МАФИЯ"));
+        assertTrue(log, log.contains("Убит игрок 6"));
+        assertTrue(log, log.contains("Голосование: 7 — 3, 8 — 3, 9 — 3"));
+        assertTrue(log, log.contains("Ничья: 7, 8, 9"));
+        assertTrue(log, log.contains("Переголосование: 7 — 3, 8 — 3, 9 — 3"));
+        assertTrue(log, log.contains("Поднять всех (7, 8, 9): за 5 из 9 — покидают стол"));
+        assertTrue(log, log.contains("Лучший ход игрока 6: 1, 2, 3 — угадано мафии: 3 из 3"));
+        assertTrue(log, log.endsWith("Победила мафия\n  Лучший ход игрока 6: 1, 2, 3 — угадано мафии: 3 из 3"));
+        assertEquals("Победила мафия", table.ui.gameOverTitle);
+
+        List<String> said = table.voice.said;
+        assertTrue(said.contains("Игрок номер 10"));
+        assertTrue(said.contains("Наступает ночь. Мафия просыпается. У вас минута на договорку."));
+        assertTrue(said.contains("Десять секунд."));
+        assertTrue(said.contains("7, кто за 7?"));
+        assertTrue(said.contains("Кто за то, чтобы все игроки 7, 8, 9 покинули стол?"));
+        assertTrue(said.contains("Лучший ход игрока 6: номера 1, 2, 3."));
+        assertEquals("Игра окончена. Победила мафия!", said.get(said.size() - 1));
+        assertFalse(table.music.playing);
+    }
+
+    /**
+     * Чёрные стреляют в разных игроков — промахи в ночи 1 и 2. Со второго дня единственная
+     * кандидатура уходит без голосования; день 3 — голосование 5:4; ночью 3 оставшийся
+     * мафиози убивает 4; день 4 — уходит последний чёрный, победа мирных.
+     */
+    @Test
+    public void missesSingleNomineeAndVote() {
+        Map<Integer, Map<Integer, Integer>> nominations = new HashMap<>();
+        nominations.put(2, map(2, 1));
+        nominations.put(3, map(3, 2, 5, 3));
+        nominations.put(4, map(5, 3));
+        Table table = new Table(nominations, Arrays.asList(5), 0);
+        table.play();
+
+        String log = table.game.log().toString();
+        assertTrue(log, log.contains("Голосование не проводилось"));
+        assertTrue(log, log.contains("Промах — никто не убит"));
+        assertTrue(log, log.contains("Единственная кандидатура — игрок 1 покидает стол"));
+        assertTrue(log, log.contains("Голосование: 2 — 5, 3 — 4"));
+        assertTrue(log, log.contains("Стол покидает игрок 2"));
+        assertTrue(log, log.contains("Убит игрок 4"));
+        assertTrue(log, log.contains("Единственная кандидатура — игрок 3 покидает стол"));
+        assertFalse(log, log.contains("Лучший ход"));
+        assertEquals("Победили мирные жители", table.ui.gameOverTitle);
+    }
+
+    @Test
+    public void plural() {
+        assertEquals("1 голос", Texts.plural("votes", 1));
+        assertEquals("3 голоса", Texts.plural("votes", 3));
+        assertEquals("5 голосов", Texts.plural("votes", 5));
+        assertEquals("11 голосов", Texts.plural("votes", 11));
+        assertEquals("21 голос", Texts.plural("votes", 21));
+        assertEquals("0 голосов", Texts.plural("votes", 0));
+    }
+
+    private static Map<Integer, Integer> map(int... pairs) {
+        Map<Integer, Integer> m = new HashMap<>();
+        for (int i = 0; i < pairs.length; i += 2) {
+            m.put(pairs[i], pairs[i + 1]);
+        }
+        return m;
+    }
+
+    // ───────────────────────────── Стол с ботом ─────────────────────────────
+
+    private static final class Table {
+        final Game game = new Game(ROLES);
+        final FakeScheduler scheduler = new FakeScheduler();
+        final FakeVoice voice = new FakeVoice();
+        final FakeMusic music = new FakeMusic();
+        final FakeUi ui = new FakeUi();
+        final GameFlow flow = new GameFlow(game, ui, voice, music, scheduler);
+        /** День → (говорящий → кого выставляет). */
+        final Map<Integer, Map<Integer, Integer>> nominations;
+        final Deque<Integer> votes;
+        /** Цель мафии ночью; 0 — каждый стреляет в первого доступного, кроме себя (промах). */
+        final int shotTarget;
+
+        Table(Map<Integer, Map<Integer, Integer>> nominations, List<Integer> votes, int shotTarget) {
+            this.nominations = nominations;
+            this.votes = new ArrayDeque<>(votes);
+            this.shotTarget = shotTarget;
+        }
+
+        void play() {
+            flow.start();
+            for (int step = 0; !flow.isOver(); step++) {
+                if (step > 200_000) {
+                    fail("Партия не закончилась; экран: " + ui.current.title);
+                }
+                if (!act() && !scheduler.runNext()) {
+                    fail("Игра зависла на экране: " + ui.current.title);
+                }
+            }
+        }
+
+        /** Одно действие игрока на текущем экране; false — ждать (времени или голоса). */
+        boolean act() {
+            Screen s = ui.current;
+            switch (s.kind) {
+                case "speech": {
+                    Integer nominee = nominations.getOrDefault(game.dayNumber(), new HashMap<>()).get(ui.handoffPlayer);
+                    if (!s.done && nominee != null) {
+                        s.done = true;
+                        s.grid.click(nominee);
+                        return s.confirm.click();
+                    }
+                    return false;
+                }
+                case "vote": {
+                    if (!s.action.clickable()) {
+                        return false;
+                    }
+                    int target = votes.removeFirst();
+                    while (s.count < target) {
+                        s.plus.run();
+                    }
+                    return s.action.click();
+                }
+                case "night": {
+                    if (s.grid != null && !s.done) {
+                        s.done = true;
+                        pick(s);
+                    }
+                    return s.action.click();
+                }
+                default:
+                    return s.action != null && s.action.click();
+            }
+        }
+
+        private void pick(Screen s) {
+            List<Integer> enabled = new ArrayList<>(s.grid.enabled);
+            if (s.title.equals(Texts.get("shot.title"))) {
+                int shooter = ui.handoffPlayer;
+                if (shotTarget != 0) {
+                    s.grid.click(shotTarget);
+                } else {
+                    // Каждый стреляет в соседа справа — цели разные, промах.
+                    s.grid.click(shooter % Game.PLAYER_COUNT + 1);
+                }
+            } else if (s.title.equals(Texts.get("bestMove.title"))) {
+                for (int k = 0; k < 3; k++) {
+                    s.grid.click(enabled.get(k));
+                }
+            } else {
+                s.grid.click(enabled.get(0));
+            }
+        }
+    }
+
+    // ───────────────────────────── Подделки ─────────────────────────────
+
+    private static final class FakeScheduler implements Scheduler {
+        private static final class Task {
+            final long at;
+            final long seq;
+            final Runnable action;
+
+            Task(long at, long seq, Runnable action) {
+                this.at = at;
+                this.seq = seq;
+                this.action = action;
+            }
+        }
+
+        private final List<Task> tasks = new ArrayList<>();
+        private long now = 0;
+        private long seq = 0;
+
+        @Override
+        public void post(Runnable action, long delayMs) {
+            tasks.add(new Task(now + delayMs, seq++, action));
+        }
+
+        @Override
+        public void cancel(Runnable action) {
+            tasks.removeIf(t -> t.action == action);
+        }
+
+        @Override
+        public void cancelAll() {
+            tasks.clear();
+        }
+
+        @Override
+        public long now() {
+            return now;
+        }
+
+        /** Выполняет ближайшее отложенное действие, передвигая время. */
+        boolean runNext() {
+            Task next = null;
+            for (Task t : tasks) {
+                if (next == null || t.at < next.at || (t.at == next.at && t.seq < next.seq)) {
+                    next = t;
+                }
+            }
+            if (next == null) {
+                return false;
+            }
+            tasks.remove(next);
+            now = next.at;
+            next.action.run();
+            return true;
+        }
+    }
+
+    /** Голос, который договаривает фразу мгновенно. */
+    private static final class FakeVoice implements Voice {
+        final List<String> said = new ArrayList<>();
+
+        @Override
+        public void say(String text) {
+            say(text, null);
+        }
+
+        @Override
+        public void say(String text, Runnable onDone) {
+            assertFalse("Пустая фраза", text == null || text.isEmpty());
+            said.add(text);
+            if (onDone != null) {
+                onDone.run();
+            }
+        }
+
+        @Override
+        public void beep() {
+        }
+
+        @Override
+        public void endSignal() {
+        }
+    }
+
+    private static final class FakeMusic implements Music {
+        boolean playing;
+
+        @Override
+        public void start() {
+            playing = true;
+        }
+
+        @Override
+        public void stop() {
+            playing = false;
+        }
+    }
+
+    private static final class FakeButton implements GameUi.Button {
+        String text;
+        boolean enabled = true;
+        Runnable onClick;
+
+        @Override
+        public void setText(String text) {
+            this.text = text;
+        }
+
+        @Override
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        @Override
+        public void setOnClick(Runnable action) {
+            onClick = action;
+        }
+
+        boolean clickable() {
+            return enabled && onClick != null;
+        }
+
+        /** Нажатие срабатывает один раз, как у настоящей кнопки. */
+        boolean click() {
+            if (!clickable()) {
+                return false;
+            }
+            Runnable action = onClick;
+            onClick = null;
+            action.run();
+            return true;
+        }
+    }
+
+    private static final class FakeGrid implements GameUi.Grid {
+        final Collection<Integer> enabled;
+        IntConsumer listener;
+
+        FakeGrid(Collection<Integer> enabled) {
+            this.enabled = new ArrayList<>(enabled);
+        }
+
+        void click(int number) {
+            assertTrue("Номер " + number + " недоступен", enabled.contains(number));
+            listener.accept(number);
+        }
+
+        @Override
+        public void setListener(IntConsumer onNumber) {
+            listener = onNumber;
+        }
+
+        @Override
+        public void select(Collection<Integer> numbers) {
+        }
+
+        @Override
+        public void lock(Collection<Integer> numbers) {
+            enabled.clear();
+        }
+    }
+
+    /** Текущий экран: всё, что на нём видно, и чем можно нажать. */
+    private static final class Screen implements GameUi.SpeechView, GameUi.VoteView, GameUi.NightView {
+        final String kind;
+        final String title;
+        FakeButton action;
+        FakeButton confirm;
+        FakeGrid grid;
+        Runnable plus;
+        int count;
+        boolean done;
+
+        Screen(String kind, String title) {
+            assertFalse("Пустой заголовок экрана " + kind, title == null || title.isEmpty());
+            this.kind = kind;
+            this.title = title;
+        }
+
+        @Override
+        public void setTime(long remainingMs) {
+        }
+
+        @Override
+        public void setPaused(boolean paused) {
+        }
+
+        @Override
+        public void setControlsEnabled(boolean enabled) {
+        }
+
+        @Override
+        public GameUi.Grid grid() {
+            return grid;
+        }
+
+        @Override
+        public GameUi.Button confirm() {
+            return confirm;
+        }
+
+        @Override
+        public void setHint(String text) {
+        }
+
+        @Override
+        public void setNominees(String text) {
+        }
+
+        @Override
+        public void setOnMinus(Runnable action) {
+        }
+
+        @Override
+        public void setOnPlus(Runnable action) {
+            plus = action;
+        }
+
+        @Override
+        public void setCount(int count, String hint, boolean canMinus, boolean canPlus) {
+            this.count = count;
+        }
+
+        @Override
+        public GameUi.Button action() {
+            return action;
+        }
+
+        @Override
+        public void hideGrid() {
+        }
+
+        @Override
+        public void showResult(String text) {
+        }
+    }
+
+    private static final class FakeUi implements GameUi {
+        Screen current = new Screen("start", "—");
+        int handoffPlayer;
+        String gameOverTitle;
+
+        @Override
+        public void setPhase(String label) {
+        }
+
+        @Override
+        public Button showMessage(String title, String text, String button, Runnable next) {
+            current = new Screen("message", title);
+            current.action = new FakeButton();
+            if (button != null) {
+                current.action.setText(button);
+                current.action.setOnClick(next);
+            }
+            return current.action;
+        }
+
+        @Override
+        public void showHandoff(String title, int player, String hint, String button, Runnable next) {
+            handoffPlayer = player;
+            current = new Screen("handoff", title);
+            current.action = new FakeButton();
+            current.action.setOnClick(next);
+        }
+
+        @Override
+        public void showCard(String player, String roleTitle, Role role, long durationMs) {
+            current = new Screen("card", roleTitle);
+        }
+
+        @Override
+        public TimerView showTimer(String title, String subtitle, TimerControls controls) {
+            current = new Screen("timer", title);
+            return current;
+        }
+
+        @Override
+        public SpeechView showSpeech(String title, String hint, Collection<Integer> enabled, TimerControls controls) {
+            current = new Screen("speech", title);
+            current.grid = new FakeGrid(enabled);
+            current.confirm = new FakeButton();
+            current.confirm.enabled = false;
+            return current;
+        }
+
+        @Override
+        public VoteView showVoteInput(String title, String question) {
+            current = new Screen("vote", title);
+            current.action = new FakeButton();
+            return current;
+        }
+
+        @Override
+        public NightView showNight(String header, String title, String hint, Collection<Integer> enabled) {
+            current = new Screen("night", title);
+            current.action = new FakeButton();
+            if (enabled != null) {
+                current.grid = new FakeGrid(enabled);
+            }
+            return current;
+        }
+
+        @Override
+        public void showGameOver(String title, String log) {
+            current = new Screen("over", title);
+            gameOverTitle = title;
+        }
+    }
+}

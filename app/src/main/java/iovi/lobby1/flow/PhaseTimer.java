@@ -1,11 +1,9 @@
-package iovi.lobby1.ui;
+package iovi.lobby1.flow;
 
-import android.os.Handler;
-import android.os.Looper;
-import android.os.SystemClock;
+import java.util.Locale;
 
-/** Обратный отсчёт с паузой и сигналом «осталось 10 секунд». Работает в главном потоке. */
-final class PhaseTimer {
+/** Обратный отсчёт с паузой и сигналом «осталось 10 секунд». */
+public final class PhaseTimer {
     static final long WARNING_MS = 10_000;
     private static final long TICK_MS = 200;
 
@@ -17,7 +15,7 @@ final class PhaseTimer {
         void onFinish();
     }
 
-    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Scheduler scheduler;
     private Listener listener;
     private long remainingMs;
     private long lastTickAt;
@@ -27,7 +25,7 @@ final class PhaseTimer {
     private final Runnable tick = new Runnable() {
         @Override
         public void run() {
-            long now = SystemClock.elapsedRealtime();
+            long now = scheduler.now();
             remainingMs -= now - lastTickAt;
             lastTickAt = now;
             if (remainingMs <= 0) {
@@ -43,9 +41,13 @@ final class PhaseTimer {
                 listener.onWarning();
             }
             listener.onTick(remainingMs);
-            handler.postDelayed(this, TICK_MS);
+            scheduler.post(this, TICK_MS);
         }
     };
+
+    PhaseTimer(Scheduler scheduler) {
+        this.scheduler = scheduler;
+    }
 
     void start(long durationMs, Listener listener) {
         cancel();
@@ -61,8 +63,8 @@ final class PhaseTimer {
         if (!running) {
             return;
         }
-        handler.removeCallbacks(tick);
-        remainingMs -= SystemClock.elapsedRealtime() - lastTickAt;
+        scheduler.cancel(tick);
+        remainingMs -= scheduler.now() - lastTickAt;
         running = false;
     }
 
@@ -71,8 +73,8 @@ final class PhaseTimer {
             return;
         }
         running = true;
-        lastTickAt = SystemClock.elapsedRealtime();
-        handler.postDelayed(tick, TICK_MS);
+        lastTickAt = scheduler.now();
+        scheduler.post(tick, TICK_MS);
     }
 
     boolean isRunning() {
@@ -80,13 +82,14 @@ final class PhaseTimer {
     }
 
     void cancel() {
-        handler.removeCallbacks(tick);
+        scheduler.cancel(tick);
         running = false;
         listener = null;
     }
 
-    static String format(long ms) {
+    /** «1:05» — оставшееся время для экрана, с округлением вверх до секунды. */
+    public static String format(long ms) {
         long seconds = (ms + 999) / 1000;
-        return String.format(java.util.Locale.US, "%d:%02d", seconds / 60, seconds % 60);
+        return String.format(Locale.US, "%d:%02d", seconds / 60, seconds % 60);
     }
 }

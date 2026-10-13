@@ -6,8 +6,10 @@ import android.media.MediaPlayer;
 import android.net.Uri;
 import android.util.Log;
 
+import iovi.lobby1.flow.Music;
+
 /** Зацикленная фоновая музыка ночных фаз из файла, выбранного в настройках. */
-public final class NightMusic {
+public final class NightMusic implements Music {
     private static final String TAG = "NightMusic";
     private static final float FULL_VOLUME = 1.0f;
     private static final float DUCKED_VOLUME = 0.2f;
@@ -29,6 +31,7 @@ public final class NightMusic {
     }
 
     /** Запускает музыку, если файл выбран; повторный вызов во время игры ничего не делает. */
+    @Override
     public void start() {
         start(MusicPrefs.uri(context));
     }
@@ -72,6 +75,7 @@ public final class NightMusic {
         return player != null;
     }
 
+    @Override
     public void stop() {
         if (player != null) {
             player.release();
