@@ -94,6 +94,51 @@ public class GameFlowTest {
         assertEquals("Победили мирные жители", table.ui.gameOverTitle);
     }
 
+    /** Чёрные выходят по одному со второго дня, начиная с дона; говорящий 5 выставляет их. */
+    private static Map<Integer, Map<Integer, Integer>> blacksLeaveOneByOne() {
+        Map<Integer, Map<Integer, Integer>> nominations = new HashMap<>();
+        nominations.put(2, map(5, 1));
+        nominations.put(3, map(5, 2));
+        nominations.put(4, map(5, 3));
+        return nominations;
+    }
+
+    /** Ночью никто не действует: после отсчёта выстрел и проверка не принимаются — промах. */
+    @Test
+    public void nightActionsCloseAfterCountdown() {
+        Table table = new Table(blacksLeaveOneByOne(), Arrays.asList(), 6);
+        table.sleepy = true;
+        table.play();
+
+        String log = table.game.log().toString();
+        assertTrue(log, log.contains("Дон мафии (игрок 1) не выстрелил — время вышло"));
+        assertTrue(log, log.contains("Мафия (игрок 2) не выстрелил — время вышло"));
+        assertTrue(log, log.contains("Шериф (игрок 4) не сделал проверку — время вышло"));
+        assertTrue(log, log.contains("Промах — никто не убит"));
+        assertFalse(log, log.contains("Убит игрок"));
+        assertEquals("Победили мирные жители", table.ui.gameOverTitle);
+    }
+
+    /**
+     * Дон и мафия 3 выбирают промах (дон после этого всё равно проверяет), мафия 2 стреляет в 6 —
+     * каждую ночь промах.
+     */
+    @Test
+    public void oneMissMeansMiss() {
+        Table table = new Table(blacksLeaveOneByOne(), Arrays.asList(), 6);
+        table.missers.addAll(Arrays.asList(1, 3));
+        table.play();
+
+        String log = table.game.log().toString();
+        assertTrue(log, log.contains("Дон мафии (игрок 1) выбрал промах"));
+        assertTrue(log, log.contains("Мафия (игрок 2) стреляет в игрока 6"));
+        assertTrue(log, log.contains("Дон проверил игрока"));
+        assertTrue(log, log.contains("Промах — никто не убит"));
+        assertFalse(log, log.contains("Убит игрок"));
+        assertFalse(log, log.contains("время вышло"));
+        assertEquals("Победили мирные жители", table.ui.gameOverTitle);
+    }
+
     @Test
     public void plural() {
         assertEquals("1 голос", Texts.plural("votes", 1));
@@ -126,6 +171,10 @@ public class GameFlowTest {
         final Deque<Integer> votes;
         /** Цель мафии ночью; 0 — каждый стреляет в первого доступного, кроме себя (промах). */
         final int shotTarget;
+        /** Чёрные, которые ночью выбирают промах. */
+        final List<Integer> missers = new ArrayList<>();
+        /** Ночью никто не стреляет и не проверяет — ждут конца отсчёта. */
+        boolean sleepy;
 
         Table(Map<Integer, Map<Integer, Integer>> nominations, List<Integer> votes, int shotTarget) {
             this.nominations = nominations;
@@ -169,8 +218,14 @@ public class GameFlowTest {
                     return s.action.click();
                 }
                 case "night": {
-                    if (s.grid != null && !s.done) {
+                    boolean nightAction = s.title.equals(Texts.get("shot.title"))
+                            || s.title.equals(Texts.get("don.title"))
+                            || s.title.equals(Texts.get("sheriff.title"));
+                    if (s.grid != null && !s.done && !(sleepy && nightAction)) {
                         s.done = true;
+                        if (s.extra != null && missers.contains(ui.handoffPlayer)) {
+                            return s.extra.click();
+                        }
                         pick(s);
                     }
                     return s.action.click();
@@ -367,6 +422,7 @@ public class GameFlowTest {
         final String kind;
         final String title;
         FakeButton action;
+        FakeButton extra;
         FakeButton confirm;
         FakeGrid grid;
         Runnable plus;
@@ -426,6 +482,18 @@ public class GameFlowTest {
         @Override
         public GameUi.Button action() {
             return action;
+        }
+
+        @Override
+        public GameUi.Button showExtra(String text) {
+            extra = new FakeButton();
+            extra.setText(text);
+            return extra;
+        }
+
+        @Override
+        public void hideExtra() {
+            extra = null;
         }
 
         @Override

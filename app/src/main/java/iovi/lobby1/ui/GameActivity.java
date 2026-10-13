@@ -376,7 +376,10 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
     private static final class NightScreen implements NightView {
         private final GridLayout gridLayout;
         private final Grid grid;
+        private final TextView hint;
+        private final TextView time;
         private final TextView result;
+        private final ActionButton extra;
         private final Button action;
 
         NightScreen(View v, Collection<Integer> enabled) {
@@ -387,7 +390,10 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
             } else {
                 grid = new NumberGridView(gridLayout, enabled);
             }
+            hint = v.findViewById(R.id.hint);
+            time = v.findViewById(R.id.time);
             result = v.findViewById(R.id.result);
+            extra = new ActionButton(v.findViewById(R.id.extra));
             action = new ActionButton(v.findViewById(R.id.action));
         }
 
@@ -399,6 +405,29 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
         @Override
         public Button action() {
             return action;
+        }
+
+        @Override
+        public void setTime(long remainingMs) {
+            time.setVisibility(View.VISIBLE);
+            time.setText(PhaseTimer.format(remainingMs));
+        }
+
+        @Override
+        public void setHint(String text) {
+            hint.setText(text);
+        }
+
+        @Override
+        public Button showExtra(String text) {
+            extra.setText(text);
+            extra.view.setVisibility(View.VISIBLE);
+            return extra;
+        }
+
+        @Override
+        public void hideExtra() {
+            extra.view.setVisibility(View.GONE);
         }
 
         @Override

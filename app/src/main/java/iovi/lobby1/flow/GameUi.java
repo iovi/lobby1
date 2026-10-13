@@ -74,6 +74,16 @@ public interface GameUi {
 
         Button action();
 
+        /** Отсчёт хода; пока не задан, его на экране нет. */
+        void setTime(long remainingMs);
+
+        void setHint(String text);
+
+        /** Показывает дополнительную кнопку над основной. */
+        Button showExtra(String text);
+
+        void hideExtra();
+
         void hideGrid();
 
         void showResult(String text);
