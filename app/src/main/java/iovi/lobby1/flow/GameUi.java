@@ -1,8 +1,13 @@
 package iovi.lobby1.flow;
 
 import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.function.IntConsumer;
 
+import iovi.lobby1.game.Protocol;
 import iovi.lobby1.game.Role;
 
 /**
@@ -89,6 +94,21 @@ public interface GameUi {
         void showResult(String text);
     }
 
+    /** Протокол: строка на каждого игрока с кнопками отметок, итог и кнопка действия. */
+    interface ProtocolView {
+        void setListener(BiConsumer<Integer, Protocol.Mark> onMark);
+
+        /** Отметка игрока (null — без отметки) и какие отметки ему сейчас можно поставить. */
+        void setRow(int player, Protocol.Mark mark, Set<Protocol.Mark> allowed);
+
+        /** Запрещает дальнейшие отметки. */
+        void lock();
+
+        void setSummary(String text);
+
+        Button action();
+    }
+
     void setPhase(String label);
 
     /** text или button равны null — соответствующая часть экрана скрыта. */
@@ -107,6 +127,10 @@ public interface GameUi {
 
     /** enabled == null — экран без сетки номеров. */
     NightView showNight(String header, String title, String hint, Collection<Integer> enabled);
+
+    /** players — строки протокола по порядку; labels — подписи кнопок отметок. */
+    ProtocolView showProtocol(String header, String title, String hint, List<Integer> players,
+                              Map<Protocol.Mark, String> labels);
 
     void showGameOver(String title, String log);
 }

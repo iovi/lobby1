@@ -15,9 +15,12 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.function.IntConsumer;
 
 import iovi.lobby1.game.Game;
+import iovi.lobby1.game.Protocol;
 import iovi.lobby1.game.Role;
 import iovi.lobby1.text.Texts;
 
@@ -41,6 +44,11 @@ public class GameFlowTest {
         nominations.put(1, map(1, 5));
         nominations.put(2, map(2, 7, 3, 8, 4, 9));
         Table table = new Table(nominations, Arrays.asList(3, 3, 3, 3, 5), 6);
+        // Четвёртый чёрный и второй шериф не принимаются — протокол не противоречит раздаче.
+        table.protocols.put(6, Arrays.asList(
+                new Mark(1, Protocol.Mark.BLACK), new Mark(2, Protocol.Mark.BLACK), new Mark(3, Protocol.Mark.BLACK),
+                new Mark(7, Protocol.Mark.BLACK), new Mark(4, Protocol.Mark.SHERIFF), new Mark(5, Protocol.Mark.SHERIFF),
+                new Mark(5, Protocol.Mark.RED), new Mark(9, Protocol.Mark.RED), new Mark(9, Protocol.Mark.RED)));
         table.play();
 
         String log = table.game.log().toString();
@@ -54,7 +62,11 @@ public class GameFlowTest {
         assertTrue(log, log.contains("Переголосование: 7 — 3, 8 — 3, 9 — 3"));
         assertTrue(log, log.contains("Поднять всех (7, 8, 9): за 5 из 9 — покидают стол"));
         assertTrue(log, log.contains("Лучший ход игрока 6: 1, 2, 3 — угадано мафии: 3 из 3"));
-        assertTrue(log, log.endsWith("Победила мафия\n  Лучший ход игрока 6: 1, 2, 3 — угадано мафии: 3 из 3"));
+        assertTrue(log, log.contains("Протокол игрока 6: красные — 5; чёрные — 1, 2, 3; шериф — 4"));
+        assertTrue(log, log.contains("Игрок 7 не оставил протокол"));
+        assertTrue(log, log.contains("Игрок 9 не оставил протокол"));
+        assertTrue(log, log.endsWith("Победила мафия\n  Лучший ход игрока 6: 1, 2, 3 — угадано мафии: 3 из 3"
+                + "\n  Протокол игрока 6: красные — 5; чёрные — 1, 2, 3; шериф — 4. Верно: 5 из 5"));
         assertEquals("Победила мафия", table.ui.gameOverTitle);
 
         List<String> said = table.voice.said;
@@ -66,6 +78,14 @@ public class GameFlowTest {
         assertTrue(said.contains("7, кто за 7?"));
         assertTrue(said.contains("Кто за то, чтобы все игроки 7, 8, 9 покинули стол?"));
         assertTrue(said.contains("Лучший ход игрока 6: номера 1, 2, 3."));
+        assertTrue(said.contains("Игрок 6, ваш протокол."));
+        int protocolAt = said.indexOf("Протокол.");
+        assertEquals(Arrays.asList("Протокол.",
+                        PAUSE, "5 — красный.", PAUSE, "1 — чёрный.", PAUSE, "2 — чёрный.", PAUSE, "3 — чёрный.",
+                        PAUSE, "4 — шериф."),
+                said.subList(protocolAt, protocolAt + 11));
+        assertTrue(said.contains("Протокол не оставлен."));
+        assertTrue(said.indexOf("Спасибо, игрок 6.") < said.indexOf("Игрок 6, ваш протокол."));
         assertEquals("Игра окончена. Победила мафия!", said.get(said.size() - 1));
         assertFalse(table.music.playing);
     }
@@ -168,6 +188,16 @@ public class GameFlowTest {
         assertEquals("0 голосов", Texts.plural("votes", 0));
     }
 
+    private static final class Mark {
+        final int player;
+        final Protocol.Mark mark;
+
+        Mark(int player, Protocol.Mark mark) {
+            this.player = player;
+            this.mark = mark;
+        }
+    }
+
     private static Map<Integer, Integer> map(int... pairs) {
         Map<Integer, Integer> m = new HashMap<>();
         for (int i = 0; i < pairs.length; i += 2) {
@@ -194,6 +224,8 @@ public class GameFlowTest {
         final List<Integer> missers = new ArrayList<>();
         /** Ночью никто не стреляет и не проверяет — ждут конца отсчёта. */
         boolean sleepy;
+        /** Автор протокола → нажатия по порядку; кого нет — оставляет протокол пустым. */
+        final Map<Integer, List<Mark>> protocols = new HashMap<>();
 
         Table(Map<Integer, Map<Integer, Integer>> nominations, List<Integer> votes, int shotTarget) {
             this.nominations = nominations;
@@ -246,6 +278,16 @@ public class GameFlowTest {
                             return s.extra.click();
                         }
                         pick(s);
+                    }
+                    return s.action.click();
+                }
+                case "protocol": {
+                    if (!s.done) {
+                        s.done = true;
+                        for (Mark m : protocols.getOrDefault(ui.handoffPlayer, new ArrayList<>())) {
+                            // Недопустимую отметку бот всё равно нажимает — экран её не примет.
+                            s.markListener.accept(m.player, m.mark);
+                        }
                     }
                     return s.action.click();
                 }
@@ -350,6 +392,11 @@ public class GameFlowTest {
         }
 
         @Override
+        public void pause(long ms) {
+            said.add(PAUSE);
+        }
+
+        @Override
         public void beep() {
         }
 
@@ -357,6 +404,9 @@ public class GameFlowTest {
         public void endSignal() {
         }
     }
+
+    /** Пауза в очереди голоса — так она записывается в {@link FakeVoice#said}. */
+    private static final String PAUSE = "[пауза]";
 
     private static final class FakeMusic implements Music {
         boolean playing;
@@ -437,7 +487,8 @@ public class GameFlowTest {
     }
 
     /** Текущий экран: всё, что на нём видно, и чем можно нажать. */
-    private static final class Screen implements GameUi.SpeechView, GameUi.VoteView, GameUi.NightView {
+    private static final class Screen
+            implements GameUi.SpeechView, GameUi.VoteView, GameUi.NightView, GameUi.ProtocolView {
         final String kind;
         final String title;
         FakeButton action;
@@ -447,6 +498,24 @@ public class GameFlowTest {
         Runnable plus;
         int count;
         boolean done;
+        BiConsumer<Integer, Protocol.Mark> markListener;
+
+        @Override
+        public void setListener(BiConsumer<Integer, Protocol.Mark> onMark) {
+            markListener = onMark;
+        }
+
+        @Override
+        public void setRow(int player, Protocol.Mark mark, Set<Protocol.Mark> allowed) {
+        }
+
+        @Override
+        public void lock() {
+        }
+
+        @Override
+        public void setSummary(String text) {
+        }
 
         Screen(String kind, String title) {
             assertFalse("Пустой заголовок экрана " + kind, title == null || title.isEmpty());
@@ -586,6 +655,14 @@ public class GameFlowTest {
             if (enabled != null) {
                 current.grid = new FakeGrid(enabled);
             }
+            return current;
+        }
+
+        @Override
+        public ProtocolView showProtocol(String header, String title, String hint, List<Integer> players,
+                                         Map<Protocol.Mark, String> labels) {
+            current = new Screen("protocol", title);
+            current.action = new FakeButton();
             return current;
         }
 

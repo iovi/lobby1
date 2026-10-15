@@ -3,6 +3,7 @@ package iovi.lobby1.flow;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -11,6 +12,7 @@ import java.util.Set;
 import java.util.function.IntConsumer;
 
 import iovi.lobby1.game.Game;
+import iovi.lobby1.game.Protocol;
 import iovi.lobby1.game.Role;
 import iovi.lobby1.game.Voting;
 import iovi.lobby1.text.Texts;
@@ -38,6 +40,8 @@ public final class GameFlow {
     private static final long NIGHT_END_PAUSE_MS = 5_000;
     /** Время на поднятие рук между «кто за X?» и «Спасибо». */
     private static final long VOTE_WINDOW_MS = 1_000;
+    /** Пауза между игроками при оглашении протокола — чтобы стол успевал записать. */
+    private static final long PROTOCOL_PAUSE_MS = 700;
 
     private final Game game;
     private final GameUi ui;
@@ -70,6 +74,8 @@ public final class GameFlow {
     private final Set<Integer> missed = new HashSet<>();
     /** Строка лучшего хода для итога партии; null — лучшего хода не было. */
     private String bestMoveSummary;
+    /** Строки протоколов для итога партии, в порядке выбывания. */
+    private final List<String> protocolSummaries = new ArrayList<>();
 
     private final GameUi.TimerControls timerControls = new GameUi.TimerControls() {
         @Override
@@ -445,7 +451,95 @@ public final class GameFlow {
         int x = leaving.get(i);
         voice.say(t("voice.farewell", x));
         showTimer(t("farewell.title"), t("farewell.subtitle", x), FAREWELL_MS, true,
-                t("voice.farewellEnd", x), () -> farewell(leaving, i + 1, then));
+                t("voice.farewellEnd", x), () -> protocol(x, () -> farewell(leaving, i + 1, then)));
+    }
+
+    // ───────────────────────────── Протокол ─────────────────────────────
+
+    /** После прощальной минуты выбывший отмечает, кого из игроков считает красным, чёрным или шерифом. */
+    private void protocol(int n, Runnable then) {
+        voice.say(t("voice.protocol", n));
+        showHandoff(t("protocol.title"), n, t("protocol.handoffHint"), t("protocol.start"),
+                () -> showProtocol(n, then));
+    }
+
+    private void showProtocol(int n, Runnable then) {
+        List<Integer> players = new ArrayList<>();
+        for (int k = 1; k <= Game.PLAYER_COUNT; k++) {
+            if (k != n) {
+                players.add(k);
+            }
+        }
+        Map<Protocol.Mark, String> labels = new EnumMap<>(Protocol.Mark.class);
+        for (Protocol.Mark mark : Protocol.Mark.values()) {
+            labels.put(mark, t("protocol.mark." + mark.name()));
+        }
+        newScreen();
+        GameUi.ProtocolView view = ui.showProtocol(t("player", n), t("protocol.title"), t("protocol.hint"),
+                players, labels);
+        GameUi.Button action = view.action();
+        Protocol protocol = new Protocol(n);
+        boolean[] confirmed = {false};
+        Runnable refresh = () -> {
+            for (int k : players) {
+                view.setRow(k, protocol.mark(k), protocol.allowed(k));
+            }
+            view.setSummary(protocol.isEmpty() ? t("protocol.nobody") : protocolParts(protocol, "protocol.part.", "\n"));
+            action.setText(protocol.isEmpty() ? t("protocol.empty") : t("protocol.confirm"));
+        };
+        view.setListener((player, mark) -> {
+            if (!confirmed[0] && protocol.toggle(player, mark)) {
+                refresh.run();
+            }
+        });
+        refresh.run();
+
+        action.setOnClick(() -> {
+            confirmed[0] = true;
+            view.lock();
+            if (protocol.isEmpty()) {
+                game.log().add(t("log.protocolEmpty", n));
+                voice.say(t("voice.protocolEmpty"));
+            } else {
+                String logParts = protocolParts(protocol, "log.protocol.part.", "; ");
+                game.log().add(t("log.protocol", n, logParts));
+                protocolSummaries.add(t("log.protocolSummary", n, logParts, protocol.correct(game), protocol.size()));
+                announceProtocol(protocol);
+            }
+            action.setText(t("protocol.next"));
+            action.setOnClick(then);
+        });
+    }
+
+    /**
+     * «Протокол.» (номер автора не называется), затем каждый отмеченный отдельной фразой с паузой:
+     * сначала красные, затем чёрные, затем шериф. Паузы стоят в очереди голоса, поэтому озвучка
+     * не обрывается при переходе к следующему экрану.
+     */
+    private void announceProtocol(Protocol protocol) {
+        voice.say(t("voice.protocolResult"));
+        for (Protocol.Mark mark : Protocol.Mark.values()) {
+            for (int n : protocol.players(mark)) {
+                voice.pause(PROTOCOL_PAUSE_MS);
+                voice.say(t("voice.protocol.mark." + mark.name(), n));
+            }
+        }
+    }
+
+    /** Отметки протокола по ключам prefix + RED/BLACK/SHERIFF; пустые группы пропускаются. */
+    private static String protocolParts(Protocol protocol, String prefix, String separator) {
+        StringBuilder sb = new StringBuilder();
+        for (Protocol.Mark mark : Protocol.Mark.values()) {
+            List<Integer> marked = protocol.players(mark);
+            if (marked.isEmpty()) {
+                continue;
+            }
+            if (sb.length() > 0) {
+                sb.append(separator);
+            }
+            sb.append(t(prefix + mark.name(), Game.joinNumbers(marked)));
+        }
+        return sb.toString();
     }
 
     // ──────────────────────────────── Ночь ────────────────────────────────
@@ -766,6 +860,9 @@ public final class GameFlow {
         game.log().add(title);
         if (bestMoveSummary != null) {
             game.log().add(bestMoveSummary);
+        }
+        for (String summary : protocolSummaries) {
+            game.log().add(summary);
         }
         voice.say(t("voice.gameOver", title));
         ui.setPhase(t("phase.over"));

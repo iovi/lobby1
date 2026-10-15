@@ -170,18 +170,35 @@ public final class Announcer implements Voice {
         return text;
     }
 
+    /** Тишина в очереди фраз; до готовности синтеза и без голоса пауза не нужна. */
+    @Override
+    public void pause(long ms) {
+        if (!ready || failed) {
+            return;
+        }
+        String id = "u" + (utteranceSeq++);
+        if (tts.playSilentUtterance(ms, TextToSpeech.QUEUE_ADD, id) == TextToSpeech.SUCCESS) {
+            utteranceStarted();
+        }
+    }
+
     private void speak(String text, Runnable onDone) {
         String id = "u" + (utteranceSeq++);
         if (tts.speak(withStress(text), TextToSpeech.QUEUE_ADD, new Bundle(), id) == TextToSpeech.SUCCESS) {
             if (onDone != null) {
                 callbacks.put(id, onDone);
             }
-            activeUtterances++;
-            if (activeUtterances == 1) {
-                listener.onSpeakingChanged(true);
-            }
+            utteranceStarted();
         } else if (onDone != null) {
             main.post(onDone);
+        }
+    }
+
+    /** Пауза тоже считается речью — музыка не выходит из приглушения между фразами. */
+    private void utteranceStarted() {
+        activeUtterances++;
+        if (activeUtterances == 1) {
+            listener.onSpeakingChanged(true);
         }
     }
 

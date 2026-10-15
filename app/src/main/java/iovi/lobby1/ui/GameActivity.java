@@ -1,14 +1,19 @@
 package iovi.lobby1.ui;
 
 import android.animation.ObjectAnimator;
+import android.content.res.ColorStateList;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.GridLayout;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -22,6 +27,12 @@ import com.google.android.material.button.MaterialButton;
 
 import java.security.SecureRandom;
 import java.util.Collection;
+import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.function.IntConsumer;
 
 import iovi.lobby1.R;
@@ -31,6 +42,7 @@ import iovi.lobby1.flow.GameFlow;
 import iovi.lobby1.flow.GameUi;
 import iovi.lobby1.flow.PhaseTimer;
 import iovi.lobby1.game.Game;
+import iovi.lobby1.game.Protocol;
 import iovi.lobby1.game.Role;
 
 /**
@@ -203,6 +215,16 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
         this.<TextView>find(v, R.id.title).setText(title);
         this.<TextView>find(v, R.id.hint).setText(hint);
         return new NightScreen(v, enabled);
+    }
+
+    @Override
+    public ProtocolView showProtocol(String header, String title, String hint, List<Integer> players,
+                                     Map<Protocol.Mark, String> labels) {
+        View v = show(R.layout.screen_protocol);
+        this.<TextView>find(v, R.id.role).setText(header);
+        this.<TextView>find(v, R.id.title).setText(title);
+        this.<TextView>find(v, R.id.hint).setText(hint);
+        return new ProtocolScreen(v, players, labels);
     }
 
     @Override
@@ -439,6 +461,102 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
         public void showResult(String text) {
             result.setVisibility(View.VISIBLE);
             result.setText(text);
+        }
+    }
+
+    /** Строка на игрока: номер и кнопки отметок; выбранная отметка закрашена цветом карты. */
+    private final class ProtocolScreen implements ProtocolView {
+        private final Map<Integer, Map<Protocol.Mark, MaterialButton>> rows = new HashMap<>();
+        private final TextView summary;
+        private final Button action;
+        private BiConsumer<Integer, Protocol.Mark> listener;
+
+        ProtocolScreen(View v, List<Integer> players, Map<Protocol.Mark, String> labels) {
+            summary = v.findViewById(R.id.summary);
+            action = new ActionButton(v.findViewById(R.id.action));
+            LinearLayout container = v.findViewById(R.id.rows);
+            int margin = dp(4);
+            for (int player : players) {
+                LinearLayout row = new LinearLayout(GameActivity.this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+
+                TextView number = new TextView(GameActivity.this);
+                number.setText(String.valueOf(player));
+                number.setTextSize(TypedValue.COMPLEX_UNIT_SP, 24);
+                number.setTypeface(Typeface.DEFAULT_BOLD);
+                number.setTextColor(ContextCompat.getColor(GameActivity.this, R.color.text_primary));
+                number.setGravity(Gravity.CENTER);
+                row.addView(number, new LinearLayout.LayoutParams(dp(44), LinearLayout.LayoutParams.WRAP_CONTENT));
+
+                Map<Protocol.Mark, MaterialButton> buttons = new EnumMap<>(Protocol.Mark.class);
+                for (Protocol.Mark mark : Protocol.Mark.values()) {
+                    MaterialButton b = new MaterialButton(GameActivity.this);
+                    b.setText(labels.get(mark));
+                    b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+                    b.setAllCaps(false);
+                    b.setLetterSpacing(0f);
+                    b.setInsetTop(0);
+                    b.setInsetBottom(0);
+                    b.setPadding(0, 0, 0, 0);
+                    b.setMinWidth(0);
+                    b.setMinimumWidth(0);
+                    b.setSingleLine(true);
+                    b.setCornerRadius(dp(12));
+                    b.setStrokeWidth(dp(1));
+                    b.setOnClickListener(x -> {
+                        if (listener != null) {
+                            listener.accept(player, mark);
+                        }
+                    });
+                    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(52), 1f);
+                    lp.setMargins(margin, margin, margin, margin);
+                    row.addView(b, lp);
+                    buttons.put(mark, b);
+                }
+                rows.put(player, buttons);
+                container.addView(row, new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            }
+        }
+
+        @Override
+        public void setListener(BiConsumer<Integer, Protocol.Mark> onMark) {
+            listener = onMark;
+        }
+
+        @Override
+        public void setRow(int player, Protocol.Mark mark, Set<Protocol.Mark> allowed) {
+            for (Map.Entry<Protocol.Mark, MaterialButton> e : rows.get(player).entrySet()) {
+                MaterialButton b = e.getValue();
+                boolean on = e.getKey() == mark;
+                int fill = !on ? R.color.number_idle
+                        : e.getKey() == Protocol.Mark.BLACK ? R.color.card_black : R.color.card_red;
+                b.setBackgroundTintList(ColorStateList.valueOf(ContextCompat.getColor(GameActivity.this, fill)));
+                b.setStrokeColor(ColorStateList.valueOf(ContextCompat.getColor(GameActivity.this,
+                        on ? R.color.card_border : R.color.number_idle)));
+                b.setEnabled(allowed.contains(e.getKey()));
+                b.setAlpha(b.isEnabled() ? 1f : 0.25f);
+            }
+        }
+
+        @Override
+        public void lock() {
+            for (Map<Protocol.Mark, MaterialButton> buttons : rows.values()) {
+                for (MaterialButton b : buttons.values()) {
+                    b.setClickable(false);
+                }
+            }
+        }
+
+        @Override
+        public void setSummary(String text) {
+            summary.setText(text);
+        }
+
+        @Override
+        public Button action() {
+            return action;
         }
     }
 
