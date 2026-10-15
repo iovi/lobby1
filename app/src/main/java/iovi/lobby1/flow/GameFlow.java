@@ -295,6 +295,11 @@ public final class GameFlow {
             used += votes[k];
         }
         int remaining = voting.voters() - used;
+        if (remaining == 0) {
+            // Все голоса уже отданы — оставшиеся кандидатуры не называем, у них по нулю.
+            finishVoteRound(voting, votes);
+            return;
+        }
         int x = candidates.get(i);
         String title = voting.isRevote() ? t("vote.revoteTitle") : t("vote.title");
         String question = t("vote.question", x);

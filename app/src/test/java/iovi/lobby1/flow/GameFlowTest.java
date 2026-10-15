@@ -96,6 +96,23 @@ public class GameFlowTest {
         assertEquals("Победили мирные жители", table.ui.gameOverTitle);
     }
 
+    /** День 2: все 10 голосов за дона — вторую кандидатуру не называют, у неё 0 голосов. */
+    @Test
+    public void allVotesGivenSkipsRemainingCandidates() {
+        Map<Integer, Map<Integer, Integer>> nominations = blacksLeaveOneByOne();
+        nominations.put(2, map(5, 1, 6, 2));
+        Table table = new Table(nominations, Arrays.asList(10), 0);
+        table.play();
+
+        String log = table.game.log().toString();
+        assertTrue(log, log.contains("Голосование: 1 — 10, 2 — 0"));
+        assertTrue(log, log.contains("Стол покидает игрок 1"));
+        List<String> said = table.voice.said;
+        assertTrue(said.contains("1, кто за 1?"));
+        assertFalse(said.contains("2, кто за 2?"));
+        assertEquals("Победили мирные жители", table.ui.gameOverTitle);
+    }
+
     /** Чёрные выходят по одному со второго дня, начиная с дона; говорящий 5 выставляет их. */
     private static Map<Integer, Map<Integer, Integer>> blacksLeaveOneByOne() {
         Map<Integer, Map<Integer, Integer>> nominations = new HashMap<>();
