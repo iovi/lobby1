@@ -39,7 +39,7 @@ public final class GameFlow {
     /** Пауза после последнего ночного хода — положить телефон на стол. */
     private static final long NIGHT_END_PAUSE_MS = 5_000;
     /** Время на поднятие рук между «кто за X?» и «Спасибо». */
-    private static final long VOTE_WINDOW_MS = 1_000;
+    private static final long VOTE_WINDOW_MS = 500;
     /** Пауза между игроками при оглашении протокола — чтобы стол успевал записать. */
     private static final long PROTOCOL_PAUSE_MS = 700;
 
@@ -286,9 +286,14 @@ public final class GameFlow {
                 break;
             }
             default: {
-                voice.say(t("voice.voting", list));
-                showMessage(t("vote.title"), t("vote.intro", list, voting.voters()), t("vote.begin"),
-                        () -> voteRound(voting, new int[voting.candidates().size()], 0));
+                // Голосование начинается само, как только прозвучит объявление.
+                showMessage(t("vote.title"), t("vote.intro", list, voting.voters()), null, null);
+                int screen = screenId;
+                voice.say(t("voice.voting", list), () -> {
+                    if (screen == screenId) {
+                        voteRound(voting, new int[voting.candidates().size()], 0);
+                    }
+                });
                 break;
             }
         }
@@ -327,12 +332,12 @@ public final class GameFlow {
         announceCandidate(x, () -> action.setEnabled(true));
     }
 
-    /** «X, кто за X?», через секунду «Спасибо.»; thanked вызывается после «Спасибо». */
+    /** «X, кто за X?», через {@link #VOTE_WINDOW_MS} «Спасибо.»; thanked вызывается после «Спасибо». */
     private void announceCandidate(int x, Runnable thanked) {
         announceVote(t("voice.candidate", x), thanked);
     }
 
-    /** Вопрос голосования, через секунду «Спасибо.»; thanked вызывается после «Спасибо». */
+    /** Вопрос голосования, через {@link #VOTE_WINDOW_MS} «Спасибо.»; thanked вызывается после «Спасибо». */
     private void announceVote(String question, Runnable thanked) {
         voice.say(question,
                 () -> scheduler.post(() -> voice.say(t("voice.thanks"), thanked), VOTE_WINDOW_MS));
@@ -372,13 +377,10 @@ public final class GameFlow {
                         () -> tieSpeeches(voting, 0));
                 break;
             }
-            case LIFT_ALL: {
-                String text = t("vote.liftAll", Game.joinNumbers(voting.candidates()));
-                voice.say(text);
-                showMessage(t("vote.resultTitle"), t("vote.result", summary, text), t("vote.liftAllButton"),
-                        () -> liftAllVote(voting));
+            case LIFT_ALL:
+                // Снова поровну — без объявления сразу вопрос «поднять всех».
+                liftAllVote(voting);
                 break;
-            }
             default:
                 throw new IllegalStateException("Неожиданная фаза голосования: " + voting.phase());
         }

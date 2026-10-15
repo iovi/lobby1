@@ -77,6 +77,9 @@ public class GameFlowTest {
         assertTrue(said.contains("Игрок 7, у вас 30 секунд."));
         assertTrue(said.contains("7, кто за 7?"));
         assertTrue(said.contains("Кто за то, чтобы все игроки 7, 8, 9 покинули стол?"));
+        // После второй ничьей сразу вопрос «поднять всех» — сразу после «Спасибо» за последнюю кандидатуру.
+        assertEquals("Кто за то, чтобы все игроки 7, 8, 9 покинули стол?",
+                said.get(said.lastIndexOf("9, кто за 9?") + 2));
         assertTrue(said.contains("Лучший ход игрока 6: номера 1, 2, 3."));
         assertTrue(said.contains("Игрок 6, ваш протокол."));
         int protocolAt = said.indexOf("Протокол.");
