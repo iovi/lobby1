@@ -60,7 +60,9 @@ public class GameFlowTest {
         List<String> said = table.voice.said;
         assertTrue(said.contains("Игрок номер 10"));
         assertTrue(said.contains("Наступает ночь. Мафия просыпается. У вас минута на договорку."));
-        assertTrue(said.contains("Десять секунд."));
+        assertTrue(said.contains("Свободная посадка. 40 секунд."));
+        assertTrue(said.contains("10 секунд."));
+        assertTrue(said.contains("Игрок 7, у вас 30 секунд."));
         assertTrue(said.contains("7, кто за 7?"));
         assertTrue(said.contains("Кто за то, чтобы все игроки 7, 8, 9 покинули стол?"));
         assertTrue(said.contains("Лучший ход игрока 6: номера 1, 2, 3."));

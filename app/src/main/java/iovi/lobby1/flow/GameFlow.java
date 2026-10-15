@@ -132,7 +132,7 @@ public final class GameFlow {
     private void dealCard(int n) {
         callPlayer(n);
         showHandoff(t("dealing.title"), n,
-                t("dealing.hint", Texts.plural("seconds", (int) (CARD_SHOW_MS / 1000))),
+                t("dealing.hint", seconds(CARD_SHOW_MS)),
                 t("dealing.button"), () -> showCard(n));
     }
 
@@ -169,7 +169,7 @@ public final class GameFlow {
         view.setTime(AGREEMENT_MS);
         view.setControlsEnabled(false);
         // Минута договорки идёт с момента, когда телефон закончит объявление.
-        voice.say(t("voice.agreement"), () -> {
+        voice.say(t("voice.agreement", duration(AGREEMENT_MS)), () -> {
             if (screen != screenId) {
                 return;
             }
@@ -182,8 +182,8 @@ public final class GameFlow {
     }
 
     private void freeSeating() {
-        voice.say(t("voice.seating"));
-        showTimer(t("seating.title"), t("seating.subtitle"), FREE_SEATING_MS, false, null, this::startDay);
+        voice.say(t("voice.seating", duration(FREE_SEATING_MS)));
+        showTimer(t("seating.title"), t("seating.subtitle", duration(FREE_SEATING_MS)), FREE_SEATING_MS, false, null, this::startDay);
     }
 
     // ───────────────────────────────── День ─────────────────────────────────
@@ -354,7 +354,7 @@ public final class GameFlow {
             }
             case TIE_SPEECHES: {
                 String tied = Game.joinNumbers(voting.candidates());
-                String text = t("vote.tie", tied);
+                String text = t("vote.tie", tied, duration(TIE_SPEECH_MS));
                 game.log().add(t("log.tie", tied));
                 voice.say(text);
                 showMessage(t("vote.resultTitle"), t("vote.result", summary, text), t("vote.tieButton"),
@@ -382,7 +382,7 @@ public final class GameFlow {
             return;
         }
         int x = candidates.get(i);
-        voice.say(t("voice.tieSpeech", x));
+        voice.say(t("voice.tieSpeech", x, duration(TIE_SPEECH_MS)));
         showTimer(t("tie.title"), t("player", x), TIE_SPEECH_MS, true, t("voice.thanks"),
                 () -> tieSpeeches(voting, i + 1));
     }
@@ -461,7 +461,7 @@ public final class GameFlow {
         int n = order.get(i);
         callPlayer(n);
         showHandoff(t("night.handoff", i + 1, order.size()), n,
-                t("night.handoffHint", Texts.plural("seconds", (int) (NIGHT_TURN_MS / 1000))),
+                t("night.handoffHint", seconds(NIGHT_TURN_MS)),
                 t("night.iAm", n), () -> startNightTurn(order, i));
     }
 
@@ -806,7 +806,17 @@ public final class GameFlow {
         });
     }
 
-    /** В речах и договорке за 10 секунд до конца звучит «Десять секунд», в остальных фазах — короткий сигнал. */
+    /** «8 секунд», «40 секунд»: длительность в секундах для экрана и голоса. */
+    private static String seconds(long ms) {
+        return Texts.plural("seconds", (int) (ms / 1000));
+    }
+
+    /** Длительность фазы в именительном падеже: «минута» или «40 секунд». */
+    private static String duration(long ms) {
+        return ms == 60_000 ? Texts.get("duration.minute") : seconds(ms);
+    }
+
+    /** В речах и договорке за {@link PhaseTimer#WARNING_MS} до конца звучит «10 секунд», в остальных фазах — короткий сигнал. */
     private void runTimer(GameUi.TimerView view, long durationMs, boolean speech, Runnable onDone) {
         timerView = view;
         timerDone = onceRun(() -> {
@@ -824,7 +834,7 @@ public final class GameFlow {
             @Override
             public void onWarning() {
                 if (speech) {
-                    voice.say(t("voice.tenSeconds"));
+                    voice.say(t("voice.warning", duration(PhaseTimer.WARNING_MS)));
                 } else {
                     voice.beep();
                 }
