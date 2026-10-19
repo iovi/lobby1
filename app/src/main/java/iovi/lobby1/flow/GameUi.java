@@ -107,6 +107,9 @@ public interface GameUi {
         void setSummary(String text);
 
         Button action();
+
+        /** Показывает дополнительную кнопку под основной. */
+        Button showExtra(String text);
     }
 
     void setPhase(String label);
@@ -131,6 +134,9 @@ public interface GameUi {
     /** players — строки протокола по порядку; labels — подписи кнопок отметок. */
     ProtocolView showProtocol(String header, String title, String hint, List<Integer> players,
                               Map<Protocol.Mark, String> labels);
+
+    /** Диалог поверх экрана: onYes или onNo (в том числе при закрытии диалога) вызывается ровно один раз. */
+    void confirm(String title, String message, String yes, String no, Runnable onYes, Runnable onNo);
 
     void showGameOver(String title, String log);
 }

@@ -228,6 +228,27 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
     }
 
     @Override
+    public void confirm(String title, String message, String yes, String no, Runnable onYes, Runnable onNo) {
+        // Ответ ровно один: кнопка «да», кнопка «нет» или закрытие диалога (назад, тап мимо).
+        boolean[] answered = {false};
+        new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage(message)
+                .setPositiveButton(yes, (d, w) -> {
+                    answered[0] = true;
+                    onYes.run();
+                })
+                .setNegativeButton(no, null)
+                .setOnDismissListener(d -> {
+                    if (!answered[0]) {
+                        answered[0] = true;
+                        onNo.run();
+                    }
+                })
+                .show();
+    }
+
+    @Override
     public void showGameOver(String title, String log) {
         View v = show(R.layout.screen_game_over);
         this.<TextView>find(v, R.id.title).setText(title);
@@ -469,11 +490,13 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
         private final Map<Integer, Map<Protocol.Mark, MaterialButton>> rows = new HashMap<>();
         private final TextView summary;
         private final Button action;
+        private final ActionButton extra;
         private BiConsumer<Integer, Protocol.Mark> listener;
 
         ProtocolScreen(View v, List<Integer> players, Map<Protocol.Mark, String> labels) {
             summary = v.findViewById(R.id.summary);
             action = new ActionButton(v.findViewById(R.id.action));
+            extra = new ActionButton(v.findViewById(R.id.extra));
             LinearLayout container = v.findViewById(R.id.rows);
             int margin = dp(4);
             for (int player : players) {
@@ -557,6 +580,13 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
         @Override
         public Button action() {
             return action;
+        }
+
+        @Override
+        public Button showExtra(String text) {
+            extra.setText(text);
+            extra.view.setVisibility(View.VISIBLE);
+            return extra;
         }
     }
 

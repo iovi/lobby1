@@ -41,4 +41,12 @@
     <com.google.android.material.button.MaterialButton
         android:id="@+id/action"
         style="@style/MainButton" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/extra"
+        style="@style/SecondaryButton"
+        android:layout_width="match_parent"
+        android:layout_weight="0"
+        android:layout_marginTop="12dp"
+        android:visibility="gone" />
 </LinearLayout>

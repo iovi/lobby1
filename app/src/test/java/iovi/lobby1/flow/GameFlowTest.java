@@ -2,6 +2,7 @@ package iovi.lobby1.flow;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -76,6 +77,7 @@ public class GameFlowTest {
         assertTrue(said.contains("10 секунд."));
         assertTrue(said.contains("Игрок 7, у вас 30 секунд."));
         assertTrue(said.contains("7, кто за 7?"));
+        assertTrue(said.contains("Переголосование. На голосовании игроки: 7, 8, 9."));
         assertTrue(said.contains("Кто за то, чтобы все игроки 7, 8, 9 покинули стол?"));
         // После второй ничьей сразу вопрос «поднять всех» — сразу после «Спасибо» за последнюю кандидатуру.
         assertEquals("Кто за то, чтобы все игроки 7, 8, 9 покинули стол?",
@@ -181,6 +183,28 @@ public class GameFlowTest {
         assertEquals("Победили мирные жители", table.ui.gameOverTitle);
     }
 
+    /**
+     * Ночью 1 убит 6; после протокола он нажимает «Завершить игру», сначала отменяет, потом
+     * подтверждает — партия заканчивается без победителя, показывается итоговый лог.
+     */
+    @Test
+    public void stopGameAfterElimination() {
+        Table table = new Table(blacksLeaveOneByOne(), Arrays.asList(), 6);
+        table.stopBy = 6;
+        table.ui.confirmAnswers.addAll(Arrays.asList(false, true));
+        table.play();
+
+        assertEquals(2, table.ui.confirmations);
+        assertEquals("Игра завершена досрочно", table.ui.gameOverTitle);
+        String log = table.game.log().toString();
+        assertTrue(log, log.contains("Убит игрок 6"));
+        assertTrue(log, log.contains("Игрок 6 не оставил протокол"));
+        assertTrue(log, log.endsWith("Итог\n  Игра завершена досрочно\n  Лучший ход игрока 6: 1, 2, 3 — угадано мафии: 3 из 3"));
+        assertFalse(log, log.contains("День 2"));
+        List<String> said = table.voice.said;
+        assertEquals("Игра завершена.", said.get(said.size() - 1));
+    }
+
     @Test
     public void plural() {
         assertEquals("1 голос", Texts.plural("votes", 1));
@@ -229,6 +253,8 @@ public class GameFlowTest {
         boolean sleepy;
         /** Автор протокола → нажатия по порядку; кого нет — оставляет протокол пустым. */
         final Map<Integer, List<Mark>> protocols = new HashMap<>();
+        /** Выбывший, который после своего протокола нажимает «Завершить игру»; 0 — никто. */
+        int stopBy;
 
         Table(Map<Integer, Map<Integer, Integer>> nominations, List<Integer> votes, int shotTarget) {
             this.nominations = nominations;
@@ -278,9 +304,14 @@ public class GameFlowTest {
                     if (s.grid != null && !s.done && !(sleepy && nightAction)) {
                         s.done = true;
                         if (s.extra != null && missers.contains(ui.handoffPlayer)) {
-                            return s.extra.click();
+                            // Сначала номер, потом передумал — промах; выбор принимается только подтверждением.
+                            s.grid.click(s.grid.enabled.iterator().next());
+                            assertTrue(s.extra.click());
+                            assertNotNull("Промах принят без подтверждения", s.extra);
+                            assertEquals(Texts.get("shot.confirmMiss"), s.action.text);
+                        } else {
+                            pick(s);
                         }
-                        pick(s);
                     }
                     return s.action.click();
                 }
@@ -291,6 +322,9 @@ public class GameFlowTest {
                             // Недопустимую отметку бот всё равно нажимает — экран её не примет.
                             s.markListener.accept(m.player, m.mark);
                         }
+                    }
+                    if (s.extra != null && ui.handoffPlayer == stopBy) {
+                        return s.extra.click();
                     }
                     return s.action.click();
                 }
@@ -600,6 +634,9 @@ public class GameFlowTest {
         Screen current = new Screen("start", "—");
         int handoffPlayer;
         String gameOverTitle;
+        /** Ответы на диалоги подтверждения по порядку: true — «да». */
+        final Deque<Boolean> confirmAnswers = new ArrayDeque<>();
+        int confirmations;
 
         @Override
         public void setPhase(String label) {
@@ -667,6 +704,16 @@ public class GameFlowTest {
             current = new Screen("protocol", title);
             current.action = new FakeButton();
             return current;
+        }
+
+        @Override
+        public void confirm(String title, String message, String yes, String no, Runnable onYes, Runnable onNo) {
+            confirmations++;
+            if (confirmAnswers.removeFirst()) {
+                onYes.run();
+            } else {
+                onNo.run();
+            }
         }
 
         @Override

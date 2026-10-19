@@ -390,7 +390,7 @@ public final class GameFlow {
         List<Integer> candidates = voting.candidates();
         if (i >= candidates.size()) {
             voting.tieSpeechesDone();
-            voice.say(t("voice.revote"));
+            voice.say(t("voice.revote", Game.joinNumbers(candidates)));
             voteRound(voting, new int[candidates.size()], 0);
             return;
         }
@@ -510,7 +510,23 @@ public final class GameFlow {
             }
             action.setText(t("protocol.next"));
             action.setOnClick(then);
+            // После выбывания партию можно завершить досрочно; если победитель уже есть, игра закончится и так.
+            if (game.winner() == Game.Winner.NONE) {
+                GameUi.Button stop = view.showExtra(t("stop.button"));
+                stop.setOnClick(() -> confirmStop(stop));
+            }
         });
+    }
+
+    /** Диалог подтверждения; при отказе кнопка «Завершить игру» снова работает. */
+    private void confirmStop(GameUi.Button stop) {
+        ui.confirm(t("stop.title"), t("stop.message"), t("stop.yes"), t("stop.no"),
+                this::stopGame, () -> stop.setOnClick(() -> confirmStop(stop)));
+    }
+
+    /** Досрочное завершение партии: в разделе «Итог» вместо победителя — «Игра завершена досрочно». */
+    private void stopGame() {
+        showGameOver(t("result.stopped"), t("voice.gameStopped"));
     }
 
     /**
@@ -628,13 +644,17 @@ public final class GameFlow {
         return turnView;
     }
 
-    /** Выстрел или промах. Если промах выбрал хотя бы один чёрный, ночь проходит без убийства. */
+    /**
+     * Выстрел или промах: выбор номера или кнопки «Промах», затем подтверждение одной и той же кнопкой.
+     * Если промах выбрал хотя бы один чёрный, ночь проходит без убийства.
+     */
     private void pickShot(int n, Runnable next) {
         GameUi.NightView view = nightScreen(n, t("shot.title"), t("shot.hint"), game.alive());
         GameUi.Button action = view.action();
         action.setText(t("shot.confirm"));
         action.setEnabled(false);
         GameUi.Button miss = view.showExtra(t("shot.miss"));
+        // Номер цели; MISS — выбран промах, 0 — ещё ничего не выбрано.
         int[] target = {0};
         view.grid().setListener(number -> {
             if (!turnOpen) {
@@ -642,32 +662,46 @@ public final class GameFlow {
             }
             target[0] = number;
             view.grid().select(Collections.singleton(number));
+            action.setText(t("shot.confirm"));
             action.setEnabled(true);
         });
+        // Кнопка срабатывает один раз — после выбора промаха её обработчик ставится заново,
+        // чтобы можно было переключаться между промахом и номером.
+        Runnable[] pickMiss = new Runnable[1];
+        pickMiss[0] = () -> {
+            miss.setOnClick(pickMiss[0]);
+            if (!turnOpen) {
+                return;
+            }
+            target[0] = MISS;
+            view.grid().select(Collections.emptyList());
+            action.setText(t("shot.confirmMiss"));
+            action.setEnabled(true);
+        };
+        miss.setOnClick(pickMiss[0]);
         action.setOnClick(() -> {
             if (!turnOpen) {
                 return;
             }
-            shots.put(n, target[0]);
-            turnLocked.add(target[0]);
-            view.grid().lock(turnLocked);
             view.hideExtra();
-            game.log().add(t("log.shot", game.player(n).role().title(), n, target[0]));
-            next.run();
-        });
-        miss.setOnClick(() -> {
-            if (!turnOpen) {
-                return;
+            if (target[0] == MISS) {
+                // Промах не попадает в shots: game.resolveShots без выстрела хотя бы одного чёрного даёт промах.
+                missed.add(n);
+                view.grid().lock(turnLocked);
+                view.showResult(t("shot.missed"));
+                game.log().add(t("log.missShot", game.player(n).role().title(), n));
+            } else {
+                shots.put(n, target[0]);
+                turnLocked.add(target[0]);
+                view.grid().lock(turnLocked);
+                game.log().add(t("log.shot", game.player(n).role().title(), n, target[0]));
             }
-            // Промах не попадает в shots: game.resolveShots без выстрела хотя бы одного чёрного даёт промах.
-            missed.add(n);
-            view.grid().lock(turnLocked);
-            view.hideExtra();
-            view.showResult(t("shot.missed"));
-            game.log().add(t("log.missShot", game.player(n).role().title(), n));
             next.run();
         });
     }
+
+    /** Выбор промаха вместо номера цели в {@link #pickShot}. */
+    private static final int MISS = -1;
 
     private interface Verdict {
         String of(int target);
@@ -855,9 +889,14 @@ public final class GameFlow {
     // ───────────────────────────── Конец игры ─────────────────────────────
 
     private void showGameOver(Game.Winner winner) {
+        String title = winner == Game.Winner.MAFIA ? t("result.mafia") : t("result.civilians");
+        showGameOver(title, t("voice.gameOver", title));
+    }
+
+    /** Итог партии: раздел «Итог» в протоколе, объявление и экран с логом. */
+    private void showGameOver(String title, String announcement) {
         over = true;
         music.stop();
-        String title = winner == Game.Winner.MAFIA ? t("result.mafia") : t("result.civilians");
         game.log().section(t("log.result"));
         game.log().add(title);
         if (bestMoveSummary != null) {
@@ -866,7 +905,7 @@ public final class GameFlow {
         for (String summary : protocolSummaries) {
             game.log().add(summary);
         }
-        voice.say(t("voice.gameOver", title));
+        voice.say(announcement);
         ui.setPhase(t("phase.over"));
         newScreen();
         ui.showGameOver(title, game.log().toString());
