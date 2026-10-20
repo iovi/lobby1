@@ -382,36 +382,25 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
         @Override
         public Button showExtra(String text) {
             extra.setText(text);
-            setVisible(extra, true);
+            extra.view.setVisibility(View.VISIBLE);
             return extra;
         }
 
         @Override
         public void hideExtra() {
-            setVisible(extra, false);
+            extra.view.setVisibility(View.GONE);
         }
 
         @Override
         public Button showBonus(String text) {
             bonus.setText(text);
-            setVisible(bonus, true);
+            bonus.view.setVisibility(View.VISIBLE);
             return bonus;
         }
 
         @Override
         public void hideBonus() {
-            setVisible(bonus, false);
-        }
-
-        /** Две кнопки в ряд — с промежутком между ними, одна — во всю ширину. */
-        private void setVisible(ActionButton button, boolean visible) {
-            button.view.setVisibility(visible ? View.VISIBLE : View.GONE);
-            boolean both = extra.view.getVisibility() == View.VISIBLE && bonus.view.getVisibility() == View.VISIBLE;
-            int gap = both ? Math.round(6 * time.getResources().getDisplayMetrics().density) : 0;
-            ((LinearLayout.LayoutParams) bonus.view.getLayoutParams()).setMarginEnd(gap);
-            ((LinearLayout.LayoutParams) extra.view.getLayoutParams()).setMarginStart(gap);
-            bonus.view.requestLayout();
-            extra.view.requestLayout();
+            bonus.view.setVisibility(View.GONE);
         }
     }
 

@@ -35,23 +35,21 @@
         android:layout_marginTop="24dp"
         android:text="@string/settings_pick" />
 
-    <LinearLayout
+    <!-- Друг под другом во всю ширину: в ряд «Убрать музыку» не помещается при крупном шрифте. -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/preview"
+        style="@style/SecondaryButton"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_weight="0"
         android:layout_marginTop="12dp"
-        android:orientation="horizontal">
+        android:text="@string/settings_preview" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/preview"
-            style="@style/SecondaryButton"
-            android:layout_marginEnd="6dp"
-            android:text="@string/settings_preview" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/clear"
-            style="@style/SecondaryButton"
-            android:layout_marginStart="6dp"
-            android:text="@string/settings_clear" />
-    </LinearLayout>
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/clear"
+        style="@style/SecondaryButton"
+        android:layout_width="match_parent"
+        android:layout_weight="0"
+        android:layout_marginTop="12dp"
+        android:text="@string/settings_clear" />
 </LinearLayout>
 </FrameLayout>

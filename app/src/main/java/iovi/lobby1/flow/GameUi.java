@@ -54,7 +54,7 @@ public interface GameUi {
 
         void hideExtra();
 
-        /** Кнопка «Доп. время» рядом с дополнительной. */
+        /** Кнопка «Доп. время» над дополнительной. */
         Button showBonus(String text);
 
         void hideBonus();
