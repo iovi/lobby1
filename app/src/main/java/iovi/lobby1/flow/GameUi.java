@@ -182,4 +182,10 @@ public interface GameUi {
     void confirm(String title, String message, String yes, String no, Runnable onYes, Runnable onNo);
 
     void showGameOver(String title, String log);
+
+    /** Меню из кнопок во всю ширину; возвращает их в порядке labels. */
+    List<Button> showMenu(String title, String text, List<String> labels);
+
+    /** Лог партии с кнопкой возврата. */
+    void showLog(String title, String log, String button, Runnable back);
 }

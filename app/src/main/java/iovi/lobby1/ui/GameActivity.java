@@ -28,6 +28,7 @@ import androidx.core.content.ContextCompat;
 import com.google.android.material.button.MaterialButton;
 
 import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -268,6 +269,33 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
         this.<TextView>find(v, R.id.title).setText(title);
         this.<TextView>find(v, R.id.log).setText(log);
         v.findViewById(R.id.action).setOnClickListener(v1 -> finish());
+    }
+
+    @Override
+    public List<Button> showMenu(String title, String text, List<String> labels) {
+        View v = show(R.layout.screen_menu);
+        this.<TextView>find(v, R.id.title).setText(title);
+        this.<TextView>find(v, R.id.text).setText(text);
+        LinearLayout container = v.findViewById(R.id.buttons);
+        List<Button> buttons = new ArrayList<>();
+        for (String label : labels) {
+            MaterialButton b = (MaterialButton) LayoutInflater.from(this)
+                    .inflate(R.layout.menu_button, container, false);
+            b.setText(label);
+            container.addView(b);
+            buttons.add(new ActionButton(b));
+        }
+        return buttons;
+    }
+
+    @Override
+    public void showLog(String title, String log, String button, Runnable back) {
+        View v = show(R.layout.screen_game_over);
+        this.<TextView>find(v, R.id.title).setText(title);
+        this.<TextView>find(v, R.id.log).setText(log);
+        ActionButton action = new ActionButton(v.findViewById(R.id.action));
+        action.setText(button);
+        action.setOnClick(back);
     }
 
     /** Заменяет текущий экран. */

@@ -1,6 +1,7 @@
 package iovi.lobby1.flow;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumMap;
@@ -89,6 +90,10 @@ public final class GameFlow {
     private boolean votingCancelled;
     /** Игроки с тремя фолами, у которых уже была сокращённая дневная речь. */
     private final Set<Integer> shortSpeeches = new HashSet<>();
+    /** Мануальный режим: игру ведёт человек, телефон помогает. */
+    private boolean manual;
+    /** В мануальном режиме играет ночная музыка. */
+    private boolean manualNight;
     /** Идёт день — в строке фазы число игроков за столом. */
     private boolean inDay;
     /** На паузе текущей речи доступна кнопка «Фол»: где фол (для лога); null — речи нет. */
@@ -137,6 +142,11 @@ public final class GameFlow {
 
     public boolean isOver() {
         return over;
+    }
+
+    /** Партия переведена в мануальный режим — продолжить её в приложении нельзя. */
+    public boolean isManual() {
+        return manual;
     }
 
     /** Отменяет таймер и отложенные действия — экран игры закрывается. */
@@ -572,10 +582,12 @@ public final class GameFlow {
         showTimer(t("farewell.title"), t("farewell.subtitle", x), FAREWELL_MS, true,
                 t("voice.farewellEnd", x), then);
         offerExtraTime(x, timerView, t("foul.at.farewell", x), true);
+        // Фол на паузе — только оставшимся за столом: уходящий уже выбыл.
+        speechFouls(t("foul.at.farewell", x), () -> { });
     }
 
     /**
-     * Выбывший без протокола покинул стол: здесь, как и после протокола, партию можно завершить досрочно.
+     * Выбывший без протокола покинул стол: здесь, как и после протокола, можно перейти в мануальный режим.
      * Если победитель уже есть, экран не нужен — игра закончится и так.
      */
     private void left(int x, Runnable then) {
@@ -584,7 +596,7 @@ public final class GameFlow {
             return;
         }
         GameUi.MessageView view = showMessage(t("left.title"), t("left.text", x), t("left.next"), then);
-        offerStop(view.showExtra(t("stop.button")));
+        offerManual(view.showExtra(t("manual.button")));
     }
 
     // ───────────────────────────── Протокол ─────────────────────────────
@@ -642,27 +654,22 @@ public final class GameFlow {
             }
             action.setText(t("protocol.next"));
             action.setOnClick(then);
-            // После выбывания партию можно завершить досрочно; если победитель уже есть, игра закончится и так.
+            // После выбывания можно перейти в мануальный режим; если победитель уже есть, игра закончится и так.
             if (game.winner() == Game.Winner.NONE) {
-                offerStop(view.showExtra(t("stop.button")));
+                offerManual(view.showExtra(t("manual.button")));
             }
         });
     }
 
-    /** Кнопка «Завершить игру»: досрочное завершение после подтверждения. */
-    private void offerStop(GameUi.Button stop) {
-        stop.setOnClick(() -> confirmStop(stop));
+    /** Кнопка «Мануальный режим»: переход после подтверждения. */
+    private void offerManual(GameUi.Button button) {
+        button.setOnClick(() -> confirmManual(button));
     }
 
-    /** Диалог подтверждения; при отказе кнопка «Завершить игру» снова работает. */
-    private void confirmStop(GameUi.Button stop) {
-        ui.confirm(t("stop.title"), t("stop.message"), t("stop.yes"), t("stop.no"),
-                this::stopGame, () -> stop.setOnClick(() -> confirmStop(stop)));
-    }
-
-    /** Досрочное завершение партии: в разделе «Итог» вместо победителя — «Игра завершена досрочно». */
-    private void stopGame() {
-        showGameOver(t("result.stopped"), t("voice.gameStopped"));
+    /** Диалог подтверждения; при отказе кнопка «Мануальный режим» снова работает. */
+    private void confirmManual(GameUi.Button button) {
+        ui.confirm(t("manual.confirmTitle"), t("manual.confirmMessage"), t("manual.yes"), t("manual.no"),
+                this::startManual, () -> button.setOnClick(() -> confirmManual(button)));
     }
 
     /**
@@ -1051,6 +1058,60 @@ public final class GameFlow {
         ui.showGameOver(title, game.log().toString());
     }
 
+    // ─────────────────────────── Мануальный режим ───────────────────────────
+
+    /**
+     * Мануальный режим: игру дальше ведёт человек, телефон только помогает — лог, фолы, ночная музыка
+     * и таймеры. Вернуться к игре нельзя. В логе — «Итог» с переходом и затем раздел мануального режима.
+     */
+    private void startManual() {
+        manual = true;
+        inDay = false;
+        manualNight = false;
+        music.stop();
+        game.log().section(t("log.result"));
+        game.log().add(t("manual.result"));
+        for (String summary : bestMoveSummaries) {
+            game.log().add(summary);
+        }
+        for (String summary : protocolSummaries) {
+            game.log().add(summary);
+        }
+        game.log().section(t("manual.title"));
+        voice.say(t("voice.manual"));
+        ui.setPhase(t("manual.title"));
+        manualMenu();
+    }
+
+    private void manualMenu() {
+        newScreen();
+        List<GameUi.Button> buttons = ui.showMenu(t("manual.title"), t("manual.text"), Arrays.asList(
+                t("manual.log"), t("foul.button"), t(manualNight ? "manual.nightOff" : "manual.night"),
+                t("manual.minute"), t("manual.half")));
+        buttons.get(0).setOnClick(() -> {
+            newScreen();
+            ui.showLog(t("manual.log"), game.log().toString(), t("foul.back"), this::manualMenu);
+        });
+        offerFouls(buttons.get(1), t("foul.at.manual"), () -> { });
+        buttons.get(2).setOnClick(() -> {
+            // Ночь — только музыка, без объявлений; повторное нажатие её останавливает.
+            manualNight = !manualNight;
+            if (manualNight) {
+                music.start();
+            } else {
+                music.stop();
+            }
+            manualMenu();
+        });
+        buttons.get(3).setOnClick(() -> manualTimer(SPEECH_MS));
+        buttons.get(4).setOnClick(() -> manualTimer(SHORT_SPEECH_MS));
+    }
+
+    /** Обратный отсчёт с «10 секунд» до конца; по окончании — снова меню. */
+    private void manualTimer(long ms) {
+        showTimer(t("manual.timer"), duration(ms), ms, true, null, this::manualMenu);
+    }
+
     // ───────────────────────────────── Фолы ─────────────────────────────────
 
     /**
@@ -1145,7 +1206,7 @@ public final class GameFlow {
             view.close();
             foulsOpen = false;
             int screen = screenId;
-            if (!removed.isEmpty()) {
+            if (!removed.isEmpty() && !manual) {
                 if (inDay) {
                     ui.setPhase(t("phase.day", game.dayNumber(), game.aliveCount()));
                 }

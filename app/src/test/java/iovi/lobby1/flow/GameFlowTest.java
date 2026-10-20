@@ -151,6 +151,8 @@ public class GameFlowTest {
         table.protocols.put(5, Arrays.asList(new Mark(1, Protocol.Mark.BLACK)));
         // В нулевой круг доп. время можно взять только на прощальной речи.
         table.extraTime.add("1:5");
+        // На паузе прощальной минуты — фол оставшемуся за столом 8; самому 5 фол не поставить.
+        table.fouls.put("farewell:1:5", Arrays.asList(8));
         table.play();
 
         String log = table.game.log().toString();
@@ -158,6 +160,8 @@ public class GameFlowTest {
         assertTrue(log, log.contains("Лучший ход игрока 5: 1, 2, 3"));
         assertTrue(log, log.contains("Протокол игрока 5: чёрные — 1"));
         assertTrue(log, log.contains("Игрок 5 взял доп. время: +2 фола (теперь 2) — прощальная речь игрока 5"));
+        assertTrue(log, log.contains("1-й фол игроку 8 — прощальная речь игрока 5"));
+        assertFalse(table.ui.foulsEnabled.contains(5));
         assertFalse(log, log.contains("Лучший ход игрока 1"));
         assertFalse(log, log.contains("Игрок 1 не оставил протокол"));
         assertTrue(log, log.endsWith("Победили мирные жители\n  Лучший ход игрока 5: 1, 2, 3 — угадано мафии: 3 из 3"
@@ -262,39 +266,91 @@ public class GameFlowTest {
     }
 
     /**
-     * Ночью 1 убит 6; после протокола он нажимает «Завершить игру», сначала отменяет, потом
-     * подтверждает — партия заканчивается без победителя, показывается итоговый лог.
+     * Ночью 1 убит 6; после протокола он нажимает «Мануальный режим», сначала отменяет, потом
+     * подтверждает — игра в приложении заканчивается, открывается меню мануального режима.
+     * В нём: лог и возврат, фол с озвучкой, ночная музыка вкл/выкл, таймеры 1 минута и 30 с.
      */
     @Test
-    public void stopGameAfterElimination() {
+    public void manualModeAfterElimination() {
         Table table = new Table(blacksLeaveOneByOne(), Arrays.asList(), 6);
         table.stopBy = 6;
         table.ui.confirmAnswers.addAll(Arrays.asList(false, true));
         table.play();
 
         assertEquals(2, table.ui.confirmations);
-        assertEquals("Игра завершена досрочно", table.ui.gameOverTitle);
+        assertTrue(table.flow.isManual());
+        assertFalse(table.flow.isOver());
         String log = table.game.log().toString();
         assertTrue(log, log.contains("Убит игрок 6"));
         assertTrue(log, log.contains("Игрок 6 не оставил протокол"));
-        assertTrue(log, log.endsWith("Итог\n  Игра завершена досрочно\n  Лучший ход игрока 6: 1, 2, 3 — угадано мафии: 3 из 3"));
+        assertTrue(log, log.contains("Итог\n  Игра переведена в мануальный режим"
+                + "\n  Лучший ход игрока 6: 1, 2, 3 — угадано мафии: 3 из 3"));
         assertFalse(log, log.contains("День 2"));
-        List<String> said = table.voice.said;
-        assertEquals("Игра завершена.", said.get(said.size() - 1));
+        assertEquals("Мануальный режим.", table.voice.said.get(table.voice.said.size() - 1));
+        assertFalse(table.music.playing);
+
+        Screen menu = table.ui.current;
+        assertEquals("menu", menu.kind);
+        assertEquals(Arrays.asList("Лог игры", "Фол", "Ночь", "Таймер 1 минута", "Таймер 30 с"), menu.labels());
+
+        // Лог и обратно.
+        assertTrue(menu.buttons.get(0).click());
+        assertEquals("log", table.ui.current.kind);
+        assertTrue(table.ui.current.action.click());
+        menu = table.ui.current;
+        assertEquals("menu", menu.kind);
+
+        // Фол с озвучкой; убитому 6 фол не поставить.
+        assertTrue(menu.buttons.get(1).click());
+        Screen fouls = table.ui.current;
+        assertEquals("fouls", fouls.kind);
+        assertFalse(fouls.grid.enabled.contains(6));
+        fouls.grid.click(2);
+        assertTrue(fouls.action.click());
+        assertTrue(fouls.back.click());
+        assertTrue(table.voice.said.contains("Первый фол, игрок номер 2."));
+        assertTrue(table.game.log().toString().contains("1-й фол игроку 2 — мануальный режим"));
+        assertEquals(menu, table.ui.current);
+        assertTrue("«Фол» снова работает", menu.buttons.get(1).clickable());
+
+        // Ночь: музыка включается, повторное нажатие выключает.
+        assertTrue(menu.buttons.get(2).click());
+        assertTrue(table.music.playing);
+        menu = table.ui.current;
+        assertEquals("Выключить музыку", menu.labels().get(2));
+        assertTrue(menu.buttons.get(2).click());
+        assertFalse(table.music.playing);
+        menu = table.ui.current;
+
+        // Таймеры: «10 секунд» до конца, по окончании — снова меню.
+        for (int k : new int[] {3, 4}) {
+            int before = table.voice.said.size();
+            assertTrue(menu.buttons.get(k).click());
+            Screen timer = table.ui.current;
+            assertEquals("timer", timer.kind);
+            assertEquals(k == 3 ? 60_000 : 30_000, timer.startTime);
+            while (table.ui.current == timer) {
+                assertTrue(table.scheduler.runNext());
+            }
+            assertTrue(table.voice.said.subList(before, table.voice.said.size()).contains("10 секунд."));
+            menu = table.ui.current;
+            assertEquals("menu", menu.kind);
+        }
     }
 
-    /** День 2: заголосован дон — протокола нет, «Завершить игру» на экране «покинул стол». */
+    /** День 2: заголосован дон — протокола нет, «Мануальный режим» на экране «покинул стол». */
     @Test
-    public void stopGameAfterEliminationWithoutProtocol() {
+    public void manualModeAfterEliminationWithoutProtocol() {
         Table table = new Table(blacksLeaveOneByOne(), Arrays.asList(), 0);
         table.stopOnLeft = true;
         table.ui.confirmAnswers.add(true);
         table.play();
 
         assertEquals(1, table.ui.confirmations);
-        assertEquals("Игра завершена досрочно", table.ui.gameOverTitle);
+        assertTrue(table.flow.isManual());
         String log = table.game.log().toString();
         assertTrue(log, log.contains("Единственная кандидатура — игрок 1 покидает стол"));
+        assertTrue(log, log.contains("Игра переведена в мануальный режим"));
         assertFalse(log, log.contains("протокол"));
         assertFalse(log, log.contains("Ночь 2"));
     }
@@ -338,7 +394,8 @@ public class GameFlowTest {
         assertTrue(said.contains(removed));
         // Перед вторым днём — у кого 2 и 3 фола.
         int day2 = said.indexOf("Начинается день 2. Первым говорит игрок 2.");
-        assertEquals(Arrays.asList("2 фола у игрока 3.", "3 фола у игроков — 7, 8."), said.subList(day2 - 2, day2));
+        assertEquals(Arrays.asList(Texts.get("voice.foulsOne", 2, "3"), Texts.get("voice.foulsMany", 3, "7, 8")),
+                said.subList(day2 - 2, day2));
         // У удалённого нет ни прощальной минуты, ни речи.
         assertFalse(said.contains("Игрок 7, ваша прощальная минута."));
         assertTrue(said.lastIndexOf("Игрок 7") < said.indexOf(removed));
@@ -377,7 +434,7 @@ public class GameFlowTest {
         int taken = said.indexOf("Взято доп время.");
         assertTrue(taken > 0);
         assertEquals(2, table.game.fouls(6));
-        assertTrue(said.contains("2 фола у игрока 6."));
+        assertTrue(said.contains(Texts.get("voice.foulsOne", 2, "6")));
         // После доп. времени снова прозвучит «10 секунд» — до конца речи 6.
         int end = said.subList(taken, said.size()).indexOf("Спасибо, время.") + taken;
         assertTrue(said.subList(taken, end).contains("10 секунд."));
@@ -473,7 +530,7 @@ public class GameFlowTest {
 
         void play() {
             flow.start();
-            for (int step = 0; !flow.isOver(); step++) {
+            for (int step = 0; !flow.isOver() && !flow.isManual(); step++) {
                 if (step > 200_000) {
                     fail("Партия не закончилась; экран: " + ui.current.title);
                 }
@@ -576,6 +633,16 @@ public class GameFlowTest {
                     return s.action.click();
                 }
                 case "timer": {
+                    // Фол на паузе прощальной речи: пауза → «Фол» → … → «Назад» → продолжение.
+                    if (s.paused) {
+                        s.controls.onPauseToggle();
+                        assertEquals("«Фол» не пропал после продолжения", null, s.extra);
+                        return true;
+                    }
+                    if (s.controls != null && startFouls("farewell:" + game.dayNumber() + ":" + ui.handoffPlayer)) {
+                        s.controls.onPauseToggle();
+                        return s.extra.click();
+                    }
                     // Доп. время на прощальной речи; остальное время таймер идёт сам.
                     if (s.bonus != null && extraTime.remove(game.dayNumber() + ":" + ui.handoffPlayer)) {
                         return s.bonus.click();
@@ -583,7 +650,7 @@ public class GameFlowTest {
                     return false;
                 }
                 case "message": {
-                    if (s.extra != null && stopOnLeft && Texts.get("stop.button").equals(s.extra.text)) {
+                    if (s.extra != null && stopOnLeft && Texts.get("manual.button").equals(s.extra.text)) {
                         return s.extra.click();
                     }
                     return s.action.click();
@@ -805,6 +872,17 @@ public class GameFlowTest {
         /** Наибольшее показанное время — растёт после «Доп. время». */
         long maxTime;
         FakeButton bonus;
+        /** Кнопки меню мануального режима. */
+        final List<FakeButton> buttons = new ArrayList<>();
+
+        List<String> labels() {
+            List<String> result = new ArrayList<>();
+            for (FakeButton b : buttons) {
+                result.add(b.text);
+            }
+            return result;
+        }
+
         /** Экран фолов: закрытие возвращает экран под ним. */
         Runnable onClose;
 
@@ -961,6 +1039,8 @@ public class GameFlowTest {
         int confirmations;
         /** Кнопки показанных сообщений по порядку; null — сообщение без кнопки. */
         final List<String> messageButtons = new ArrayList<>();
+        /** Кому можно было поставить фол на последнем открытом экране фолов. */
+        List<Integer> foulsEnabled = new ArrayList<>();
         /** Экраны с таймером (договорка, прощальные и оправдательные речи…) по порядку. */
         final List<Screen> timers = new ArrayList<>();
         /** Экраны дневных речей по порядку. */
@@ -999,6 +1079,7 @@ public class GameFlowTest {
         @Override
         public TimerView showTimer(String title, String subtitle, TimerControls controls) {
             current = new Screen("timer", title);
+            current.controls = controls;
             timers.add(current);
             return current;
         }
@@ -1040,10 +1121,30 @@ public class GameFlowTest {
         }
 
         @Override
+        public List<Button> showMenu(String title, String text, List<String> labels) {
+            current = new Screen("menu", title);
+            for (String label : labels) {
+                FakeButton b = new FakeButton();
+                b.setText(label);
+                current.buttons.add(b);
+            }
+            return new ArrayList<>(current.buttons);
+        }
+
+        @Override
+        public void showLog(String title, String log, String button, Runnable back) {
+            current = new Screen("log", title);
+            current.action = new FakeButton();
+            current.action.setText(button);
+            current.action.setOnClick(back);
+        }
+
+        @Override
         public FoulView showFouls(String title, Collection<Integer> enabled) {
             Screen below = current;
             Screen fouls = new Screen("fouls", title);
             fouls.grid = new FakeGrid(enabled);
+            foulsEnabled = new ArrayList<>(enabled);
             fouls.action = new FakeButton();
             fouls.back = new FakeButton();
             fouls.onClose = () -> current = below;
