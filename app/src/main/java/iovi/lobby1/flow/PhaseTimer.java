@@ -77,6 +77,19 @@ public final class PhaseTimer {
         scheduler.post(tick, TICK_MS);
     }
 
+    /** Добавляет время к идущему или стоящему на паузе отсчёту; «10 секунд» прозвучит снова. */
+    void extend(long ms) {
+        if (listener == null) {
+            return;
+        }
+        remainingMs += ms;
+        long current = running ? remainingMs - (scheduler.now() - lastTickAt) : remainingMs;
+        if (current > WARNING_MS) {
+            warned = false;
+        }
+        listener.onTick(current);
+    }
+
     boolean isRunning() {
         return running;
     }

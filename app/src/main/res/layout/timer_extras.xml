@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Кнопки над таймером: «Доп. время» и «Фол». Скрыты, пока не нужны; видимая одна занимает всю ширину. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal">
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/bonus"
+        style="@style/SecondaryButton"
+        android:layout_marginEnd="6dp"
+        android:layout_marginBottom="12dp"
+        android:visibility="gone" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/extra"
+        style="@style/SecondaryButton"
+        android:layout_marginStart="6dp"
+        android:layout_marginBottom="12dp"
+        android:visibility="gone" />
+</LinearLayout>

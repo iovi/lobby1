@@ -351,12 +351,14 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
         private final MaterialButton pause;
         private final View finish;
         private final ActionButton extra;
+        private final ActionButton bonus;
 
         TimerScreen(View v, TimerControls controls) {
             time = v.findViewById(R.id.time);
             pause = v.findViewById(R.id.pause);
             finish = v.findViewById(R.id.finish);
             extra = new ActionButton(v.findViewById(R.id.extra));
+            bonus = new ActionButton(v.findViewById(R.id.bonus));
             pause.setOnClickListener(b -> controls.onPauseToggle());
             finish.setOnClickListener(b -> controls.onFinish());
         }
@@ -380,13 +382,36 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
         @Override
         public Button showExtra(String text) {
             extra.setText(text);
-            extra.view.setVisibility(View.VISIBLE);
+            setVisible(extra, true);
             return extra;
         }
 
         @Override
         public void hideExtra() {
-            extra.view.setVisibility(View.GONE);
+            setVisible(extra, false);
+        }
+
+        @Override
+        public Button showBonus(String text) {
+            bonus.setText(text);
+            setVisible(bonus, true);
+            return bonus;
+        }
+
+        @Override
+        public void hideBonus() {
+            setVisible(bonus, false);
+        }
+
+        /** Две кнопки в ряд — с промежутком между ними, одна — во всю ширину. */
+        private void setVisible(ActionButton button, boolean visible) {
+            button.view.setVisibility(visible ? View.VISIBLE : View.GONE);
+            boolean both = extra.view.getVisibility() == View.VISIBLE && bonus.view.getVisibility() == View.VISIBLE;
+            int gap = both ? Math.round(6 * time.getResources().getDisplayMetrics().density) : 0;
+            ((LinearLayout.LayoutParams) bonus.view.getLayoutParams()).setMarginEnd(gap);
+            ((LinearLayout.LayoutParams) extra.view.getLayoutParams()).setMarginStart(gap);
+            bonus.view.requestLayout();
+            extra.view.requestLayout();
         }
     }
 

@@ -40,13 +40,7 @@
 
     <View style="@style/Spacer" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/extra"
-        style="@style/SecondaryButton"
-        android:layout_width="match_parent"
-        android:layout_weight="0"
-        android:layout_marginBottom="12dp"
-        android:visibility="gone" />
+    <include layout="@layout/timer_extras" />
 
     <include layout="@layout/timer_controls" />
 </LinearLayout>

@@ -53,6 +53,11 @@ public interface GameUi {
         Button showExtra(String text);
 
         void hideExtra();
+
+        /** Кнопка «Доп. время» рядом с дополнительной. */
+        Button showBonus(String text);
+
+        void hideBonus();
     }
 
     /** Речь игрока: таймер, сетка для выставления и кнопка подтверждения. */

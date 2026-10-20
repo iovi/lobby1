@@ -14,6 +14,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -97,6 +98,15 @@ public class GameFlowTest {
         assertFalse(said.contains("Игрок 7, ваш протокол."));
         assertTrue(said.indexOf("Спасибо, игрок 6.") < said.indexOf("Игрок 6, ваш протокол."));
         assertEquals("Игра окончена. Победила мафия!", said.get(said.size() - 1));
+        // На оправдательных речах доп. время не предлагается, хотя фолов у 7, 8, 9 нет.
+        int tieSpeeches = 0;
+        for (Screen s : table.ui.timers) {
+            if (s.title.equals(Texts.get("tie.title"))) {
+                tieSpeeches++;
+                assertEquals(null, s.bonus);
+            }
+        }
+        assertEquals(3, tieSpeeches);
         assertFalse(table.music.playing);
     }
 
@@ -139,12 +149,15 @@ public class GameFlowTest {
         nominations.put(4, map(8, 3));
         Table table = new Table(nominations, Arrays.asList(6), 0);
         table.protocols.put(5, Arrays.asList(new Mark(1, Protocol.Mark.BLACK)));
+        // В нулевой круг доп. время можно взять только на прощальной речи.
+        table.extraTime.add("1:5");
         table.play();
 
         String log = table.game.log().toString();
         assertTrue(log, log.contains("Голосование: 5 — 6, 7 — 4"));
         assertTrue(log, log.contains("Лучший ход игрока 5: 1, 2, 3"));
         assertTrue(log, log.contains("Протокол игрока 5: чёрные — 1"));
+        assertTrue(log, log.contains("Игрок 5 взял доп. время: +2 фола (теперь 2) — прощальная речь игрока 5"));
         assertFalse(log, log.contains("Лучший ход игрока 1"));
         assertFalse(log, log.contains("Игрок 1 не оставил протокол"));
         assertTrue(log, log.endsWith("Победили мирные жители\n  Лучший ход игрока 5: 1, 2, 3 — угадано мафии: 3 из 3"
@@ -287,7 +300,8 @@ public class GameFlowTest {
     }
 
     /**
-     * День 1: перед речью 2 — два фола игроку 3 и три игроку 7; на паузе речи 4 — фол игроку 6.
+     * День 1: перед речью 2 — два фола игроку 3 и по три игрокам 7 и 8; на паузе речи 4 — фол игроку 6.
+     * У 7 и 8 ближайшая речь — 30 секунд, у 8 следующие снова минута.
      * День 2: перед ним объявляют 2 и 3 фола; перед речью 5 — четвёртый фол 7: он удалён без
      * прощальной минуты, его речь пропускается, голосования нет, хотя 5 выставил 1.
      * Дальше чёрные уходят по одному, победа мирных.
@@ -300,7 +314,7 @@ public class GameFlowTest {
         nominations.put(4, map(5, 2));
         nominations.put(5, map(5, 3));
         Table table = new Table(nominations, Arrays.asList(), 0);
-        table.fouls.put("handoff:1:2", Arrays.asList(3, 3, 7, 7, 7));
+        table.fouls.put("handoff:1:2", Arrays.asList(3, 3, 7, 7, 7, 8, 8, 8));
         table.fouls.put("speech:1:4", Arrays.asList(6));
         table.fouls.put("handoff:2:5", Arrays.asList(7));
         table.play();
@@ -324,10 +338,60 @@ public class GameFlowTest {
         assertTrue(said.contains(removed));
         // Перед вторым днём — у кого 2 и 3 фола.
         int day2 = said.indexOf("Начинается день 2. Первым говорит игрок 2.");
-        assertEquals(Arrays.asList("2 фола у игрока 3.", "3 фола у игрока 7."), said.subList(day2 - 2, day2));
+        assertEquals(Arrays.asList("2 фола у игрока 3.", "3 фола у игроков — 7, 8."), said.subList(day2 - 2, day2));
         // У удалённого нет ни прощальной минуты, ни речи.
         assertFalse(said.contains("Игрок 7, ваша прощальная минута."));
         assertTrue(said.lastIndexOf("Игрок 7") < said.indexOf(removed));
+        // С тремя фолами ближайшая дневная речь — 30 секунд, следующие — снова минута; с двумя — как обычно.
+        assertEquals(30_000, speechTime(table, "Речь игрока 7", 0));
+        assertEquals(30_000, speechTime(table, "Речь игрока 8", 0));
+        assertEquals(60_000, speechTime(table, "Речь игрока 8", 1));
+        assertEquals(60_000, speechTime(table, "Речь игрока 8", 2));
+        assertEquals(60_000, speechTime(table, "Речь игрока 3", 0));
+    }
+
+    /** Длительность речи с таким заголовком; index — какая по счёту за партию. */
+    private static long speechTime(Table table, String title, int index) {
+        int k = 0;
+        for (Screen s : table.ui.speeches) {
+            if (s.title.equals(title) && k++ == index) {
+                return s.startTime;
+            }
+        }
+        throw new AssertionError("Нет речи: " + title + " #" + index);
+    }
+
+    /**
+     * День 2: игрок 6 (без фолов) берёт доп. время — 2 фола, речь 90 секунд, «10 секунд» звучит снова.
+     * День 3: у 6 два фола — кнопки нет. В первый день кнопки нет ни у кого.
+     */
+    @Test
+    public void extraTime() {
+        Table table = new Table(blacksLeaveOneByOne(), Arrays.asList(), 0);
+        table.extraTime.add("2:6");
+        table.play();
+
+        String log = table.game.log().toString();
+        assertTrue(log, log.contains("Игрок 6 взял доп. время: +2 фола (теперь 2) — речь игрока 6"));
+        List<String> said = table.voice.said;
+        int taken = said.indexOf("Взято доп время.");
+        assertTrue(taken > 0);
+        assertEquals(2, table.game.fouls(6));
+        assertTrue(said.contains("2 фола у игрока 6."));
+        // После доп. времени снова прозвучит «10 секунд» — до конца речи 6.
+        int end = said.subList(taken, said.size()).indexOf("Спасибо, время.") + taken;
+        assertTrue(said.subList(taken, end).contains("10 секунд."));
+
+        List<Screen> speeches = table.ui.speeches;
+        for (Screen s : speeches.subList(0, Game.PLAYER_COUNT)) {
+            assertEquals("Доп. время в нулевой круг: " + s.title, null, s.bonus);
+        }
+        Screen day2 = speeches.get(Game.PLAYER_COUNT + 4);
+        assertEquals("Речь игрока 6", day2.title);
+        assertEquals(90_000, day2.maxTime);
+        Screen day3 = speeches.stream().skip(2 * Game.PLAYER_COUNT).filter(s -> s.title.equals("Речь игрока 6"))
+                .findFirst().get();
+        assertEquals(null, day3.bonus);
     }
 
     @Test
@@ -387,6 +451,11 @@ public class GameFlowTest {
          * на паузе его речи. Номера по порядку, каждый — отдельный фол.
          */
         final Map<String, List<Integer>> fouls = new HashMap<>();
+        /**
+         * «день:игрок» — на своей речи игрок берёт доп. время; для прощальной речи игрок —
+         * тот, кому последним передавали телефон (лучший ход или речь).
+         */
+        final Set<String> extraTime = new HashSet<>();
         /** Фолы, которые бот вводит на открытом экране фолов. */
         List<Integer> activeFouls;
 
@@ -454,6 +523,9 @@ public class GameFlowTest {
                         s.controls.onPauseToggle();
                         return s.extra.click();
                     }
+                    if (s.bonus != null && extraTime.remove(game.dayNumber() + ":" + ui.handoffPlayer)) {
+                        return s.bonus.click();
+                    }
                     Integer nominee = nominations.getOrDefault(game.dayNumber(), new HashMap<>()).get(ui.handoffPlayer);
                     if (!s.done && nominee != null) {
                         s.done = true;
@@ -502,6 +574,13 @@ public class GameFlowTest {
                         return s.extra.click();
                     }
                     return s.action.click();
+                }
+                case "timer": {
+                    // Доп. время на прощальной речи; остальное время таймер идёт сам.
+                    if (s.bonus != null && extraTime.remove(game.dayNumber() + ":" + ui.handoffPlayer)) {
+                        return s.bonus.click();
+                    }
+                    return false;
                 }
                 case "message": {
                     if (s.extra != null && stopOnLeft && Texts.get("stop.button").equals(s.extra.text)) {
@@ -721,6 +800,11 @@ public class GameFlowTest {
         BiConsumer<Integer, Protocol.Mark> markListener;
         GameUi.TimerControls controls;
         boolean paused;
+        /** Первое показанное время таймера — длительность речи; -1 — таймера не было. */
+        long startTime = -1;
+        /** Наибольшее показанное время — растёт после «Доп. время». */
+        long maxTime;
+        FakeButton bonus;
         /** Экран фолов: закрытие возвращает экран под ним. */
         Runnable onClose;
 
@@ -783,6 +867,22 @@ public class GameFlowTest {
 
         @Override
         public void setTime(long remainingMs) {
+            if (startTime < 0) {
+                startTime = remainingMs;
+            }
+            maxTime = Math.max(maxTime, remainingMs);
+        }
+
+        @Override
+        public GameUi.Button showBonus(String text) {
+            bonus = new FakeButton();
+            bonus.setText(text);
+            return bonus;
+        }
+
+        @Override
+        public void hideBonus() {
+            bonus = null;
         }
 
         @Override
@@ -861,6 +961,10 @@ public class GameFlowTest {
         int confirmations;
         /** Кнопки показанных сообщений по порядку; null — сообщение без кнопки. */
         final List<String> messageButtons = new ArrayList<>();
+        /** Экраны с таймером (договорка, прощальные и оправдательные речи…) по порядку. */
+        final List<Screen> timers = new ArrayList<>();
+        /** Экраны дневных речей по порядку. */
+        final List<Screen> speeches = new ArrayList<>();
 
         @Override
         public void setPhase(String label) {
@@ -895,12 +999,14 @@ public class GameFlowTest {
         @Override
         public TimerView showTimer(String title, String subtitle, TimerControls controls) {
             current = new Screen("timer", title);
+            timers.add(current);
             return current;
         }
 
         @Override
         public SpeechView showSpeech(String title, String hint, Collection<Integer> enabled, TimerControls controls) {
             current = new Screen("speech", title);
+            speeches.add(current);
             current.controls = controls;
             current.grid = new FakeGrid(enabled);
             current.confirm = new FakeButton();

@@ -29,6 +29,10 @@ public final class GameFlow {
     private static final long AGREEMENT_MS = 60_000;
     private static final long FREE_SEATING_MS = 40_000;
     private static final long SPEECH_MS = 60_000;
+    /** Дневная речь игрока с тремя фолами. */
+    private static final long SHORT_SPEECH_MS = 30_000;
+    /** Сколько добавляет «Доп. время» (за 2 фола). */
+    private static final long EXTRA_TIME_MS = 30_000;
     private static final long TIE_SPEECH_MS = 30_000;
     private static final long FAREWELL_MS = 60_000;
     /**
@@ -83,6 +87,8 @@ public final class GameFlow {
     private Runnable afterFouls;
     /** Игрок удалён по фолам — голосования в этот день нет; сбрасывается с наступлением ночи. */
     private boolean votingCancelled;
+    /** Игроки с тремя фолами, у которых уже была сокращённая дневная речь. */
+    private final Set<Integer> shortSpeeches = new HashSet<>();
     /** Идёт день — в строке фазы число игроков за столом. */
     private boolean inDay;
     /** На паузе текущей речи доступна кнопка «Фол»: где фол (для лога); null — речи нет. */
@@ -288,7 +294,10 @@ public final class GameFlow {
                 speech(order, i + 1);
             }
         });
-        runTimer(view, SPEECH_MS, true, () -> {
+        // У игрока с тремя фолами короче только ближайшая дневная речь; оправдательные речи не меняются.
+        boolean shortSpeech = game.fouls(n) == Game.MAX_FOULS && shortSpeeches.add(n);
+        long duration = shortSpeech ? SHORT_SPEECH_MS : SPEECH_MS;
+        runTimer(view, duration, true, () -> {
             Integer nominee = nominatedBy.get(n);
             if (nominee != null) {
                 game.log().add(t("log.nomination", n, nominee));
@@ -296,6 +305,7 @@ public final class GameFlow {
             voice.say(t("voice.speechEnd"));
             speech(order, i + 1);
         });
+        offerExtraTime(n, view, t("foul.at.speech", n), false);
     }
 
     private String nomineesText() {
@@ -561,6 +571,7 @@ public final class GameFlow {
         voice.say(t("voice.farewell", x));
         showTimer(t("farewell.title"), t("farewell.subtitle", x), FAREWELL_MS, true,
                 t("voice.farewellEnd", x), then);
+        offerExtraTime(x, timerView, t("foul.at.farewell", x), true);
     }
 
     /**
@@ -1041,6 +1052,25 @@ public final class GameFlow {
     }
 
     // ───────────────────────────────── Фолы ─────────────────────────────────
+
+    /**
+     * «Доп. время» у игрока с 0 или 1 фолом: за 2 фола текущая речь удлиняется на {@link #EXTRA_TIME_MS}.
+     * Только на дневной (кроме нулевого круга) и прощальной речи; на оправдательной — нет.
+     */
+    private void offerExtraTime(int n, GameUi.TimerView view, String at, boolean farewell) {
+        if ((game.dayNumber() == 1 && !farewell) || game.fouls(n) > 1) {
+            return;
+        }
+        GameUi.Button bonus = view.showBonus(t("extraTime.button"));
+        bonus.setOnClick(() -> {
+            view.hideBonus();
+            game.addFoul(n);
+            int count = game.addFoul(n);
+            timer.extend(EXTRA_TIME_MS);
+            game.log().add(t("log.extraTime", n, count, at));
+            voice.say(t("voice.extraTime"));
+        });
+    }
 
     /** Во время речи кнопка «Фол» появляется на паузе и пропадает при продолжении. */
     private void speechFouls(String at, Runnable afterRemoval) {
