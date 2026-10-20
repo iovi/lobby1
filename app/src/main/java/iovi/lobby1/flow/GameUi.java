@@ -48,6 +48,11 @@ public interface GameUi {
         void setPaused(boolean paused);
 
         void setControlsEnabled(boolean enabled);
+
+        /** Показывает дополнительную кнопку над кнопками таймера. */
+        Button showExtra(String text);
+
+        void hideExtra();
     }
 
     /** Речь игрока: таймер, сетка для выставления и кнопка подтверждения. */
@@ -108,16 +113,40 @@ public interface GameUi {
 
         Button action();
 
-        /** Показывает дополнительную кнопку под основной. */
+        /** Показывает дополнительную кнопку над основной. */
         Button showExtra(String text);
     }
 
-    /** Сообщение: текст, основная кнопка и дополнительная под ней. */
+    /** Сообщение или передача телефона: основная кнопка и дополнительная над ней. */
     interface MessageView {
         Button action();
 
-        /** Показывает дополнительную кнопку под основной. */
+        /** Показывает дополнительную кнопку над основной. */
         Button showExtra(String text);
+    }
+
+    /**
+     * Регистрация фолов поверх текущего экрана: таблица — строка на игрока, номер и четыре клетки фолов;
+     * кнопка подтверждения и «Назад». Экран под ним остаётся как был.
+     */
+    interface FoulView {
+        /** Нажатие на строку игрока. */
+        void setListener(IntConsumer onPlayer);
+
+        /** Строка игрока: fouls галочек подтверждённых фолов и, если pending, — неподтверждённый следом. */
+        void setRow(int player, int fouls, boolean pending);
+
+        /** Строку больше нельзя нажать — игрок не за столом. */
+        void disable(int player);
+
+        void setHint(String text);
+
+        Button action();
+
+        Button back();
+
+        /** Убирает экран фолов — снова виден экран под ним. */
+        void close();
     }
 
     void setPhase(String label);
@@ -125,7 +154,7 @@ public interface GameUi {
     /** text или button равны null — соответствующая часть экрана скрыта. */
     MessageView showMessage(String title, String text, String button, Runnable next);
 
-    void showHandoff(String title, int player, String hint, String button, Runnable next);
+    MessageView showHandoff(String title, int player, String hint, String button, Runnable next);
 
     /** Карта роли; полоска показа убывает за durationMs. */
     void showCard(String player, String roleTitle, Role role, long durationMs);
@@ -142,6 +171,9 @@ public interface GameUi {
     /** players — строки протокола по порядку; labels — подписи кнопок отметок. */
     ProtocolView showProtocol(String header, String title, String hint, List<Integer> players,
                               Map<Protocol.Mark, String> labels);
+
+    /** Строки для всех игроков; enabled — кому можно поставить фол, остальные строки бледные. */
+    FoulView showFouls(String title, String hint, Collection<Integer> enabled);
 
     /** Диалог поверх экрана: onYes или onNo (в том числе при закрытии диалога) вызывается ровно один раз. */
     void confirm(String title, String message, String yes, String no, Runnable onYes, Runnable onNo);

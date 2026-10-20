@@ -77,6 +77,18 @@ public final class GameFlow {
     /** Строки протоколов для итога партии, в порядке выбывания. */
     private final List<String> protocolSummaries = new ArrayList<>();
 
+    /** Открыт экран фолов поверх текущего экрана. */
+    private boolean foulsOpen;
+    /** Отложено до закрытия экрана фолов (начало голосования); null — ничего. */
+    private Runnable afterFouls;
+    /** Игрок удалён по фолам — голосования в этот день нет; сбрасывается с наступлением ночи. */
+    private boolean votingCancelled;
+    /** Идёт день — в строке фазы число игроков за столом. */
+    private boolean inDay;
+    /** На паузе текущей речи доступна кнопка «Фол»: где фол (для лога); null — речи нет. */
+    private String pauseFoulAt;
+    private Runnable pauseFoulAfterRemoval;
+
     private final GameUi.TimerControls timerControls = new GameUi.TimerControls() {
         @Override
         public void onPauseToggle() {
@@ -86,9 +98,13 @@ public final class GameFlow {
             if (timer.isRunning()) {
                 timer.pause();
                 timerView.setPaused(true);
+                if (pauseFoulAt != null) {
+                    offerFouls(timerView.showExtra(t("foul.button")), pauseFoulAt, pauseFoulAfterRemoval);
+                }
             } else {
                 timer.resume();
                 timerView.setPaused(false);
+                timerView.hideExtra();
             }
         }
 
@@ -197,6 +213,7 @@ public final class GameFlow {
     private void startDay() {
         music.stop();
         game.startNewDay();
+        inDay = true;
         int day = game.dayNumber();
         ui.setPhase(t("phase.day", day, game.aliveCount()));
         game.log().section(t("log.day", day));
@@ -204,8 +221,20 @@ public final class GameFlow {
         nominatedBy.clear();
 
         List<Integer> order = game.speechOrder();
+        announceFouls();
         voice.say(day == 1 ? t("voice.firstDay", order.get(0)) : t("voice.day", order.get(0), day));
         speech(order, 0);
+    }
+
+    /** Перед началом дня — у кого 2 и 3 фола. */
+    private void announceFouls() {
+        for (int count = 2; count <= Game.MAX_FOULS; count++) {
+            List<Integer> players = game.withFouls(count);
+            if (!players.isEmpty()) {
+                voice.say(t(players.size() == 1 ? "voice.foulsOne" : "voice.foulsMany",
+                        count, Game.joinNumbers(players)));
+            }
+        }
     }
 
     private void speech(List<Integer> order, int i) {
@@ -214,8 +243,14 @@ public final class GameFlow {
             return;
         }
         int n = order.get(i);
-        showHandoff(t("speech.handoff", i + 1, order.size()), n, t("speech.handoffHint"),
+        if (!game.isAlive(n)) {
+            // Удалён по фолам — его речь пропускается.
+            speech(order, i + 1);
+            return;
+        }
+        GameUi.MessageView view = showHandoff(t("speech.handoff", i + 1, order.size()), n, t("speech.handoffHint"),
                 t("speech.start"), () -> showSpeech(order, i));
+        offerFouls(view.showExtra(t("foul.button")), t("foul.at.speechHandoff", n), () -> speech(order, i));
     }
 
     private void showSpeech(List<Integer> order, int i) {
@@ -247,6 +282,12 @@ public final class GameFlow {
         view.setNominees(nomineesText());
 
         voice.say(t("voice.speech", n));
+        // Удалённый по фолам говорящий заканчивает речь сразу.
+        speechFouls(t("foul.at.speech", n), () -> {
+            if (!game.isAlive(n)) {
+                speech(order, i + 1);
+            }
+        });
         runTimer(view, SPEECH_MS, true, () -> {
             Integer nominee = nominatedBy.get(n);
             if (nominee != null) {
@@ -266,6 +307,10 @@ public final class GameFlow {
     // ───────────────────────────── Голосование ─────────────────────────────
 
     private void startVoting() {
+        if (votingCancelled) {
+            cancelVoting();
+            return;
+        }
         Voting voting = new Voting(nominations, game.aliveCount(), game.dayNumber() == 1);
         String list = Game.joinNumbers(nominations);
         switch (voting.phase()) {
@@ -273,7 +318,7 @@ public final class GameFlow {
                 String text = nominations.isEmpty() ? t("vote.none") : t("vote.singleFirstDay");
                 game.log().add(t("log.noVote"));
                 voice.say(text);
-                showMessage(t("vote.title"), text, t("button.night"), this::startNight);
+                offerResultFouls(showMessage(t("vote.title"), text, t("button.night"), this::startNight), null);
                 break;
             }
             case FINISHED: {
@@ -285,17 +330,35 @@ public final class GameFlow {
                 break;
             }
             default: {
-                // Голосование начинается само, как только прозвучит объявление.
-                showMessage(t("vote.title"), t("vote.intro", list, voting.voters()), null, null);
+                // Голосование начинается само, как только прозвучит объявление (и закроют экран фолов).
+                GameUi.MessageView view = showMessage(t("vote.title"), t("vote.intro", list, voting.voters()), null, null);
+                offerFouls(view.showExtra(t("foul.button")), t("foul.at.votingIntro"), this::cancelVoting);
                 int screen = screenId;
                 voice.say(t("voice.voting", list), () -> {
                     if (screen == screenId) {
-                        voteRound(voting, new int[voting.candidates().size()], 0);
+                        whenFoulsClosed(() -> voteRound(voting, new int[voting.candidates().size()], 0));
                     }
                 });
                 break;
             }
         }
+    }
+
+    /** Игрок удалён по фолам — голосования в этот день нет, наступает ночь. */
+    private void cancelVoting() {
+        String text = t("vote.cancelled");
+        game.log().add(t("log.voteCancelled"));
+        voice.say(text);
+        showMessage(t("vote.title"), text, t("button.night"), this::startNight);
+    }
+
+    /**
+     * «Фол» на экране итогов голосования. Если кого-то удалили, а голосование ещё не закончено
+     * (ничья, впереди оправдательные речи), голосование отменяется; afterRemoval == null — итог остаётся.
+     */
+    private void offerResultFouls(GameUi.MessageView view, Runnable afterRemoval) {
+        offerFouls(view.showExtra(t("foul.button")), t("foul.at.votingResult"),
+                afterRemoval == null ? () -> { } : afterRemoval);
     }
 
     private void voteRound(Voting voting, int[] votes, int i) {
@@ -371,8 +434,8 @@ public final class GameFlow {
                 String text = t("vote.tie", tied, duration(TIE_SPEECH_MS));
                 game.log().add(t("log.tie", tied));
                 voice.say(text);
-                showMessage(t("vote.resultTitle"), t("vote.result", summary, text), t("vote.tieButton"),
-                        () -> tieSpeeches(voting, 0));
+                offerResultFouls(showMessage(t("vote.resultTitle"), t("vote.result", summary, text),
+                        t("vote.tieButton"), () -> tieSpeeches(voting, 0)), this::cancelVoting);
                 break;
             }
             case LIFT_ALL:
@@ -396,6 +459,7 @@ public final class GameFlow {
         voice.say(t("voice.tieSpeech", x, duration(TIE_SPEECH_MS)));
         showTimer(t("tie.title"), t("player", x), TIE_SPEECH_MS, true, t("voice.thanks"),
                 () -> tieSpeeches(voting, i + 1));
+        speechFouls(t("foul.at.tieSpeech", x), this::cancelVoting);
     }
 
     private void liftAllVote(Voting voting) {
@@ -412,8 +476,8 @@ public final class GameFlow {
             } else {
                 String text = t("vote.notLifted");
                 voice.say(text);
-                showMessage(t("vote.resultTitle"), t("vote.result", tally, text), t("button.night"),
-                        this::startNight);
+                offerResultFouls(showMessage(t("vote.resultTitle"), t("vote.result", tally, text),
+                        t("button.night"), this::startNight), null);
             }
         });
         action.setEnabled(false);
@@ -432,7 +496,14 @@ public final class GameFlow {
      */
     private void votedOut(List<Integer> players) {
         boolean lastWords = lastWords(players);
-        farewells(players, lastWords, lastWords, this::startNight);
+        // Удалённый по фолам на экране итогов уже покинул стол — прощальной минуты у него нет.
+        List<Integer> leaving = new ArrayList<>();
+        for (int x : players) {
+            if (game.isAlive(x)) {
+                leaving.add(x);
+            }
+        }
+        farewells(leaving, lastWords, lastWords, this::startNight);
     }
 
     /** Заголосован один игрок в нулевом круге — ему положены лучший ход и протокол. */
@@ -448,7 +519,7 @@ public final class GameFlow {
         if (lastWords(players)) {
             votedOut(players);
         } else {
-            showMessage(title, text, t("button.farewell"), () -> votedOut(players));
+            offerResultFouls(showMessage(title, text, t("button.farewell"), () -> votedOut(players)), null);
         }
     }
 
@@ -510,8 +581,9 @@ public final class GameFlow {
     /** После прощальной минуты выбывший отмечает, кого из игроков считает красным, чёрным или шерифом. */
     private void protocol(int n, Runnable then) {
         voice.say(t("voice.protocol", n));
-        showHandoff(t("protocol.title"), n, t("protocol.handoffHint"), t("protocol.start"),
+        GameUi.MessageView view = showHandoff(t("protocol.title"), n, t("protocol.handoffHint"), t("protocol.start"),
                 () -> showProtocol(n, then));
+        offerFouls(view.showExtra(t("foul.button")), t("foul.at.protocolHandoff", n), () -> { });
     }
 
     private void showProtocol(int n, Runnable then) {
@@ -621,6 +693,8 @@ public final class GameFlow {
         game.log().section(t("log.night", night));
         shots.clear();
         missed.clear();
+        votingCancelled = false;
+        inDay = false;
         music.start();
         List<Integer> order = game.nightOrder();
         voice.say(t("voice.night", order.get(0)));
@@ -882,8 +956,9 @@ public final class GameFlow {
     /** Лучший ход: убитый в первую ночь или заголосованный в нулевом круге называет трёх игроков, которых считает мафией. */
     private void bestMove(int n, Runnable then) {
         voice.say(t("voice.bestMove", n));
-        showHandoff(t("bestMove.title"), n, t("bestMove.handoffHint"), t("bestMove.start"),
+        GameUi.MessageView view = showHandoff(t("bestMove.title"), n, t("bestMove.handoffHint"), t("bestMove.start"),
                 () -> showBestMove(n, then));
+        offerFouls(view.showExtra(t("foul.button")), t("foul.at.bestMoveHandoff", n), () -> { });
     }
 
     private void showBestMove(int n, Runnable then) {
@@ -965,6 +1040,119 @@ public final class GameFlow {
         ui.showGameOver(title, game.log().toString());
     }
 
+    // ───────────────────────────────── Фолы ─────────────────────────────────
+
+    /** Во время речи кнопка «Фол» появляется на паузе и пропадает при продолжении. */
+    private void speechFouls(String at, Runnable afterRemoval) {
+        pauseFoulAt = at;
+        pauseFoulAfterRemoval = afterRemoval;
+    }
+
+    /**
+     * Кнопка «Фол» открывает экран фолов поверх текущего экрана. at — где выставлен фол (для лога);
+     * afterRemoval — что делать после «Назад», если кого-то удалили по фолам (может сменить экран
+     * или оставить текущий).
+     */
+    private void offerFouls(GameUi.Button button, String at, Runnable afterRemoval) {
+        button.setOnClick(() -> openFouls(at, () -> offerFouls(button, at, afterRemoval), afterRemoval));
+    }
+
+    private void openFouls(String at, Runnable rearm, Runnable afterRemoval) {
+        foulsOpen = true;
+        List<Integer> removed = new ArrayList<>();
+        GameUi.FoulView view = ui.showFouls(t("foul.title"), t("foul.hint"), game.alive());
+        for (int n = 1; n <= Game.PLAYER_COUNT; n++) {
+            view.setRow(n, game.fouls(n), false);
+        }
+        GameUi.Button action = view.action();
+        // Игрок с неподтверждённым фолом; 0 — никого.
+        int[] chosen = {0};
+        Runnable reset = () -> {
+            chosen[0] = 0;
+            action.setText(t("foul.pick"));
+            action.setEnabled(false);
+        };
+        reset.run();
+        // Нажатие на строку ставит неподтверждённый фол, повторное — снимает; другая строка — переносит.
+        view.setListener(number -> {
+            int previous = chosen[0];
+            if (previous != 0) {
+                view.setRow(previous, game.fouls(previous), false);
+            }
+            if (previous == number) {
+                reset.run();
+                return;
+            }
+            chosen[0] = number;
+            view.setRow(number, game.fouls(number), true);
+            action.setText(t("foul.confirm", number));
+            action.setEnabled(true);
+        });
+        // Кнопка срабатывает один раз — после каждого фола обработчик ставится заново.
+        Runnable[] confirm = new Runnable[1];
+        confirm[0] = () -> {
+            action.setOnClick(confirm[0]);
+            int n = chosen[0];
+            int count = game.addFoul(n);
+            view.setRow(n, count, false);
+            if (count > Game.MAX_FOULS) {
+                game.eliminate(n);
+                removed.add(n);
+                votingCancelled = true;
+                view.disable(n);
+                game.log().add(t("log.foulRemoved", n, count, at));
+                voice.say(t("voice.foulRemoved", n));
+                view.setHint(t("foul.removed", n));
+            } else {
+                game.log().add(t("log.foul", n, count, at));
+                voice.say(t("voice.foul." + count, n));
+                view.setHint(t("foul.registered", n, foulsText(count)));
+            }
+            reset.run();
+        };
+        action.setOnClick(confirm[0]);
+        GameUi.Button back = view.back();
+        back.setText(t("foul.back"));
+        back.setOnClick(() -> {
+            view.close();
+            foulsOpen = false;
+            int screen = screenId;
+            if (!removed.isEmpty()) {
+                if (inDay) {
+                    ui.setPhase(t("phase.day", game.dayNumber(), game.aliveCount()));
+                }
+                Game.Winner winner = game.winner();
+                if (winner != Game.Winner.NONE) {
+                    showGameOver(winner);
+                    return;
+                }
+                afterRemoval.run();
+            }
+            if (screen == screenId) {
+                // Остались на том же экране — «Фол» снова работает, отложенное продолжается.
+                rearm.run();
+                Runnable pending = afterFouls;
+                afterFouls = null;
+                if (pending != null) {
+                    pending.run();
+                }
+            }
+        });
+    }
+
+    /** Выполняет действие сразу или, если открыт экран фолов, — после «Назад». */
+    private void whenFoulsClosed(Runnable action) {
+        if (foulsOpen) {
+            afterFouls = action;
+        } else {
+            action.run();
+        }
+    }
+
+    private static String foulsText(int count) {
+        return Texts.plural("fouls", count);
+    }
+
     // ───────────────────────────── Общие экраны ─────────────────────────────
 
     /** Перед сменой экрана: таймер и отложенные действия прошлого экрана отменяются. */
@@ -973,6 +1161,10 @@ public final class GameFlow {
         scheduler.cancelAll();
         timerView = null;
         timerDone = null;
+        foulsOpen = false;
+        afterFouls = null;
+        pauseFoulAt = null;
+        pauseFoulAfterRemoval = null;
         screenId++;
     }
 
@@ -986,9 +1178,9 @@ public final class GameFlow {
         return ui.showMessage(title, text, button, next);
     }
 
-    private void showHandoff(String title, int player, String hint, String button, Runnable next) {
+    private GameUi.MessageView showHandoff(String title, int player, String hint, String button, Runnable next) {
         newScreen();
-        ui.showHandoff(t("handoff.title", title), player, hint, button, next);
+        return ui.showHandoff(t("handoff.title", title), player, hint, button, next);
     }
 
     private void showTimer(String title, String subtitle, long durationMs, boolean speech,

@@ -286,6 +286,50 @@ public class GameFlowTest {
         assertFalse(log, log.contains("Ночь 2"));
     }
 
+    /**
+     * День 1: перед речью 2 — два фола игроку 3 и три игроку 7; на паузе речи 4 — фол игроку 6.
+     * День 2: перед ним объявляют 2 и 3 фола; перед речью 5 — четвёртый фол 7: он удалён без
+     * прощальной минуты, его речь пропускается, голосования нет, хотя 5 выставил 1.
+     * Дальше чёрные уходят по одному, победа мирных.
+     */
+    @Test
+    public void foulsAndRemoval() {
+        Map<Integer, Map<Integer, Integer>> nominations = new HashMap<>();
+        nominations.put(2, map(5, 1));
+        nominations.put(3, map(5, 1));
+        nominations.put(4, map(5, 2));
+        nominations.put(5, map(5, 3));
+        Table table = new Table(nominations, Arrays.asList(), 0);
+        table.fouls.put("handoff:1:2", Arrays.asList(3, 3, 7, 7, 7));
+        table.fouls.put("speech:1:4", Arrays.asList(6));
+        table.fouls.put("handoff:2:5", Arrays.asList(7));
+        table.play();
+
+        String log = table.game.log().toString();
+        assertTrue(log, log.contains("1-й фол игроку 3 — перед речью игрока 2"));
+        assertTrue(log, log.contains("2-й фол игроку 3 — перед речью игрока 2"));
+        assertTrue(log, log.contains("3-й фол игроку 7 — перед речью игрока 2"));
+        assertTrue(log, log.contains("1-й фол игроку 6 — речь игрока 4"));
+        assertTrue(log, log.contains("4-й фол игроку 7 — перед речью игрока 5. Игрок 7 удалён из-за стола"));
+        assertTrue(log, log.contains("Голосование не проводилось: игрок удалён по фолам"));
+        assertFalse(log, log.contains("Игрок 7 не оставил протокол"));
+        assertEquals("Победили мирные жители", table.ui.gameOverTitle);
+
+        List<String> said = table.voice.said;
+        assertTrue(said.contains("Первый фол, игрок номер 3."));
+        assertTrue(said.contains("Второй фол, игрок номер 3."));
+        assertTrue(said.contains("Третий фол, игрок номер 7."));
+        assertTrue(said.contains("Первый фол, игрок номер 6."));
+        String removed = "Четвёртый фол, игрок номер 7, покиньте игровой стол.";
+        assertTrue(said.contains(removed));
+        // Перед вторым днём — у кого 2 и 3 фола.
+        int day2 = said.indexOf("Начинается день 2. Первым говорит игрок 2.");
+        assertEquals(Arrays.asList("2 фола у игрока 3.", "3 фола у игрока 7."), said.subList(day2 - 2, day2));
+        // У удалённого нет ни прощальной минуты, ни речи.
+        assertFalse(said.contains("Игрок 7, ваша прощальная минута."));
+        assertTrue(said.lastIndexOf("Игрок 7") < said.indexOf(removed));
+    }
+
     @Test
     public void plural() {
         assertEquals("1 голос", Texts.plural("votes", 1));
@@ -338,6 +382,19 @@ public class GameFlowTest {
         int stopBy;
         /** На экране «покинул стол» (выбывание без протокола) нажимают «Завершить игру». */
         boolean stopOnLeft;
+        /**
+         * Кому ставят фолы: «handoff:день:игрок» — на передаче телефона игроку, «speech:день:игрок» —
+         * на паузе его речи. Номера по порядку, каждый — отдельный фол.
+         */
+        final Map<String, List<Integer>> fouls = new HashMap<>();
+        /** Фолы, которые бот вводит на открытом экране фолов. */
+        List<Integer> activeFouls;
+
+        /** Есть фолы для этого момента — они станут текущими (один раз). */
+        boolean startFouls(String key) {
+            activeFouls = fouls.remove(key);
+            return activeFouls != null;
+        }
 
         Table(Map<Integer, Map<Integer, Integer>> nominations, List<Integer> votes, int shotTarget) {
             this.nominations = nominations;
@@ -361,7 +418,42 @@ public class GameFlowTest {
         boolean act() {
             Screen s = ui.current;
             switch (s.kind) {
+                case "handoff": {
+                    if (s.extra != null && startFouls("handoff:" + game.dayNumber() + ":" + ui.handoffPlayer)) {
+                        return s.extra.click();
+                    }
+                    return s.action.click();
+                }
+                case "fouls": {
+                    for (int n : activeFouls) {
+                        // Неподтверждённый фол снимается повторным нажатием и переносится на другую строку.
+                        s.grid.click(n);
+                        s.grid.click(n);
+                        assertEquals(0, s.pendingFoul);
+                        assertFalse(s.action.enabled);
+                        int other = s.grid.enabled.get(0) == n ? s.grid.enabled.get(1) : s.grid.enabled.get(0);
+                        s.grid.click(other);
+                        s.grid.click(n);
+                        assertEquals(n, s.pendingFoul);
+                        int before = s.foulRows.get(n);
+                        assertTrue(s.action.click());
+                        assertEquals(before + 1, (int) s.foulRows.get(n));
+                        assertEquals(0, s.pendingFoul);
+                    }
+                    activeFouls = null;
+                    return s.back.click();
+                }
                 case "speech": {
+                    // Фол на паузе речи: пауза → «Фол» → … → «Назад» → продолжение.
+                    if (s.paused) {
+                        s.controls.onPauseToggle();
+                        assertEquals("«Фол» не пропал после продолжения", null, s.extra);
+                        return true;
+                    }
+                    if (startFouls("speech:" + game.dayNumber() + ":" + ui.handoffPlayer)) {
+                        s.controls.onPauseToggle();
+                        return s.extra.click();
+                    }
                     Integer nominee = nominations.getOrDefault(game.dayNumber(), new HashMap<>()).get(ui.handoffPlayer);
                     if (!s.done && nominee != null) {
                         s.done = true;
@@ -412,7 +504,7 @@ public class GameFlowTest {
                     return s.action.click();
                 }
                 case "message": {
-                    if (s.extra != null && stopOnLeft) {
+                    if (s.extra != null && stopOnLeft && Texts.get("stop.button").equals(s.extra.text)) {
                         return s.extra.click();
                     }
                     return s.action.click();
@@ -585,7 +677,7 @@ public class GameFlowTest {
     }
 
     private static final class FakeGrid implements GameUi.Grid {
-        final Collection<Integer> enabled;
+        final List<Integer> enabled;
         IntConsumer listener;
 
         FakeGrid(Collection<Integer> enabled) {
@@ -614,17 +706,57 @@ public class GameFlowTest {
 
     /** Текущий экран: всё, что на нём видно, и чем можно нажать. */
     private static final class Screen
-            implements GameUi.SpeechView, GameUi.VoteView, GameUi.NightView, GameUi.ProtocolView, GameUi.MessageView {
+            implements GameUi.SpeechView, GameUi.VoteView, GameUi.NightView, GameUi.ProtocolView, GameUi.MessageView,
+            GameUi.FoulView {
         final String kind;
         final String title;
         FakeButton action;
         FakeButton extra;
         FakeButton confirm;
+        FakeButton back;
         FakeGrid grid;
         Runnable plus;
         int count;
         boolean done;
         BiConsumer<Integer, Protocol.Mark> markListener;
+        GameUi.TimerControls controls;
+        boolean paused;
+        /** Экран фолов: закрытие возвращает экран под ним. */
+        Runnable onClose;
+
+        /** Строки таблицы фолов: игрок → подтверждённые фолы; pendingFoul — у кого неподтверждённый. */
+        final Map<Integer, Integer> foulRows = new HashMap<>();
+        int pendingFoul;
+
+        @Override
+        public void setListener(IntConsumer onPlayer) {
+            grid.listener = onPlayer;
+        }
+
+        @Override
+        public void setRow(int player, int fouls, boolean pending) {
+            foulRows.put(player, fouls);
+            if (pending) {
+                pendingFoul = player;
+            } else if (pendingFoul == player) {
+                pendingFoul = 0;
+            }
+        }
+
+        @Override
+        public void disable(int player) {
+            grid.enabled.remove(Integer.valueOf(player));
+        }
+
+        @Override
+        public GameUi.Button back() {
+            return back;
+        }
+
+        @Override
+        public void close() {
+            onClose.run();
+        }
 
         @Override
         public void setListener(BiConsumer<Integer, Protocol.Mark> onMark) {
@@ -655,6 +787,7 @@ public class GameFlowTest {
 
         @Override
         public void setPaused(boolean paused) {
+            this.paused = paused;
         }
 
         @Override
@@ -746,11 +879,12 @@ public class GameFlowTest {
         }
 
         @Override
-        public void showHandoff(String title, int player, String hint, String button, Runnable next) {
+        public MessageView showHandoff(String title, int player, String hint, String button, Runnable next) {
             handoffPlayer = player;
             current = new Screen("handoff", title);
             current.action = new FakeButton();
             current.action.setOnClick(next);
+            return current;
         }
 
         @Override
@@ -767,6 +901,7 @@ public class GameFlowTest {
         @Override
         public SpeechView showSpeech(String title, String hint, Collection<Integer> enabled, TimerControls controls) {
             current = new Screen("speech", title);
+            current.controls = controls;
             current.grid = new FakeGrid(enabled);
             current.confirm = new FakeButton();
             current.confirm.enabled = false;
@@ -799,6 +934,18 @@ public class GameFlowTest {
         }
 
         @Override
+        public FoulView showFouls(String title, String hint, Collection<Integer> enabled) {
+            Screen below = current;
+            Screen fouls = new Screen("fouls", title);
+            fouls.grid = new FakeGrid(enabled);
+            fouls.action = new FakeButton();
+            fouls.back = new FakeButton();
+            fouls.onClose = () -> current = below;
+            current = fouls;
+            return fouls;
+        }
+
+        @Override
         public void confirm(String title, String message, String yes, String no, Runnable onYes, Runnable onNo) {
             confirmations++;
             if (confirmAnswers.removeFirst()) {
@@ -810,6 +957,7 @@ public class GameFlowTest {
 
         @Override
         public void showGameOver(String title, String log) {
+            assertFalse("Экран фолов не закрыт", current.kind.equals("fouls"));
             current = new Screen("over", title);
             gameOverTitle = title;
         }

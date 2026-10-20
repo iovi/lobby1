@@ -13,10 +13,13 @@ import java.util.Random;
  */
 public final class Game {
     public static final int PLAYER_COUNT = 10;
+    /** Допустимое число фолов: следующий фол удаляет игрока из-за стола. */
+    public static final int MAX_FOULS = 3;
 
     public enum Winner { NONE, CIVILIANS, MAFIA }
 
     private final List<Player> players = new ArrayList<>();
+    private final int[] fouls = new int[PLAYER_COUNT + 1];
     private final GameLog log = new GameLog();
     private int dayNumber = 0;
     /** Номер игрока, открывавшего речи текущего дня; 0 — дней ещё не было. */
@@ -78,6 +81,26 @@ public final class Game {
 
     public void eliminate(int number) {
         player(number).leave();
+    }
+
+    public int fouls(int number) {
+        return fouls[number];
+    }
+
+    /** Записывает фол и возвращает, какой он по счёту у игрока. */
+    public int addFoul(int number) {
+        return ++fouls[number];
+    }
+
+    /** Живые игроки ровно с count фолами, по номерам. */
+    public List<Integer> withFouls(int count) {
+        List<Integer> result = new ArrayList<>();
+        for (int n : alive()) {
+            if (fouls[n] == count) {
+                result.add(n);
+            }
+        }
+        return result;
     }
 
     /** Мирные побеждают, когда мафии не осталось; мафия — когда её не меньше, чем красных. */

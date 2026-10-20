@@ -144,24 +144,11 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
             action.setText(button);
             action.setOnClick(next);
         }
-        ActionButton extra = new ActionButton(v.findViewById(R.id.extra));
-        return new MessageView() {
-            @Override
-            public Button action() {
-                return action;
-            }
-
-            @Override
-            public Button showExtra(String extraText) {
-                extra.setText(extraText);
-                extra.view.setVisibility(View.VISIBLE);
-                return extra;
-            }
-        };
+        return new MessageScreen(v, action);
     }
 
     @Override
-    public void showHandoff(String title, int player, String hint, String button, Runnable next) {
+    public MessageView showHandoff(String title, int player, String hint, String button, Runnable next) {
         View v = show(R.layout.screen_handoff);
         this.<TextView>find(v, R.id.title).setText(title);
         this.<TextView>find(v, R.id.number).setText(String.valueOf(player));
@@ -169,6 +156,7 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
         ActionButton action = new ActionButton(v.findViewById(R.id.action));
         action.setText(button);
         action.setOnClick(next);
+        return new MessageScreen(v, action);
     }
 
     @Override
@@ -238,6 +226,16 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
         this.<TextView>find(v, R.id.title).setText(title);
         this.<TextView>find(v, R.id.hint).setText(hint);
         return new ProtocolScreen(v, players, labels);
+    }
+
+    @Override
+    public FoulView showFouls(String title, String hint, Collection<Integer> enabled) {
+        // Поверх текущего экрана, не заменяя его: после «Назад» экран под ним снова виден как был.
+        View v = LayoutInflater.from(this).inflate(R.layout.screen_fouls, screen, false);
+        screen.addView(v);
+        this.<TextView>find(v, R.id.title).setText(title);
+        this.<TextView>find(v, R.id.hint).setText(hint);
+        return new FoulScreen(v, enabled);
     }
 
     @Override
@@ -325,15 +323,40 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
         }
     }
 
+    /** Сообщение или передача телефона: основная кнопка и скрытая дополнительная над ней. */
+    private static final class MessageScreen implements MessageView {
+        private final Button action;
+        private final ActionButton extra;
+
+        MessageScreen(View v, Button action) {
+            this.action = action;
+            extra = new ActionButton(v.findViewById(R.id.extra));
+        }
+
+        @Override
+        public Button action() {
+            return action;
+        }
+
+        @Override
+        public Button showExtra(String text) {
+            extra.setText(text);
+            extra.view.setVisibility(View.VISIBLE);
+            return extra;
+        }
+    }
+
     private static class TimerScreen implements TimerView {
         private final TextView time;
         private final MaterialButton pause;
         private final View finish;
+        private final ActionButton extra;
 
         TimerScreen(View v, TimerControls controls) {
             time = v.findViewById(R.id.time);
             pause = v.findViewById(R.id.pause);
             finish = v.findViewById(R.id.finish);
+            extra = new ActionButton(v.findViewById(R.id.extra));
             pause.setOnClickListener(b -> controls.onPauseToggle());
             finish.setOnClickListener(b -> controls.onFinish());
         }
@@ -352,6 +375,18 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
         public void setControlsEnabled(boolean enabled) {
             pause.setEnabled(enabled);
             finish.setEnabled(enabled);
+        }
+
+        @Override
+        public Button showExtra(String text) {
+            extra.setText(text);
+            extra.view.setVisibility(View.VISIBLE);
+            return extra;
+        }
+
+        @Override
+        public void hideExtra() {
+            extra.view.setVisibility(View.GONE);
         }
     }
 
@@ -600,6 +635,122 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
             extra.setText(text);
             extra.view.setVisibility(View.VISIBLE);
             return extra;
+        }
+    }
+
+    /**
+     * Экран фолов поверх текущего: таблица — строка на игрока, номер и четыре клетки.
+     * Подтверждённый фол — белая галочка на тёмном, неподтверждённый — белая галочка на красном.
+     */
+    private final class FoulScreen implements FoulView {
+        private final View view;
+        private final Map<Integer, LinearLayout> rows = new HashMap<>();
+        private final Map<Integer, ImageView[]> cells = new HashMap<>();
+        private final TextView hint;
+        private final Button action;
+        private final ActionButton back;
+        private IntConsumer listener;
+
+        FoulScreen(View v, Collection<Integer> enabled) {
+            view = v;
+            hint = v.findViewById(R.id.hint);
+            action = new ActionButton(v.findViewById(R.id.action));
+            back = new ActionButton(v.findViewById(R.id.back));
+            LinearLayout container = v.findViewById(R.id.rows);
+            int margin = dp(3);
+            for (int player = 1; player <= Game.PLAYER_COUNT; player++) {
+                LinearLayout row = new LinearLayout(GameActivity.this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+
+                TextView number = new TextView(GameActivity.this);
+                number.setText(String.valueOf(player));
+                number.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
+                number.setTypeface(Typeface.DEFAULT_BOLD);
+                number.setTextColor(ContextCompat.getColor(GameActivity.this, R.color.text_primary));
+                number.setGravity(Gravity.CENTER);
+                row.addView(number, new LinearLayout.LayoutParams(dp(44), LinearLayout.LayoutParams.WRAP_CONTENT));
+
+                ImageView[] marks = new ImageView[Game.MAX_FOULS + 1];
+                for (int k = 0; k < marks.length; k++) {
+                    ImageView cell = new ImageView(GameActivity.this);
+                    cell.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                    cell.setPadding(0, dp(3), 0, dp(3));
+                    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(40), 1f);
+                    lp.setMargins(margin, margin, margin, margin);
+                    row.addView(cell, lp);
+                    marks[k] = cell;
+                }
+
+                final int target = player;
+                boolean on = enabled.contains(player);
+                row.setAlpha(on ? 1f : 0.3f);
+                if (on) {
+                    row.setOnClickListener(x -> {
+                        if (listener != null) {
+                            listener.accept(target);
+                        }
+                    });
+                }
+                rows.put(player, row);
+                cells.put(player, marks);
+                container.addView(row, new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+                setRow(player, 0, false);
+            }
+        }
+
+        @Override
+        public void setListener(IntConsumer onPlayer) {
+            listener = onPlayer;
+        }
+
+        @Override
+        public void setRow(int player, int fouls, boolean pending) {
+            ImageView[] marks = cells.get(player);
+            for (int k = 0; k < marks.length; k++) {
+                boolean done = k < fouls;
+                boolean waiting = pending && k == fouls;
+                GradientDrawable bg = new GradientDrawable();
+                bg.setCornerRadius(dp(8));
+                if (waiting) {
+                    bg.setColor(ContextCompat.getColor(GameActivity.this, R.color.accent));
+                } else if (done) {
+                    bg.setColor(ContextCompat.getColor(GameActivity.this, R.color.number_idle));
+                } else {
+                    bg.setStroke(dp(1), ContextCompat.getColor(GameActivity.this, R.color.number_idle));
+                }
+                marks[k].setBackground(bg);
+                marks[k].setImageResource(done || waiting ? R.drawable.ic_foul_check : 0);
+            }
+        }
+
+        @Override
+        public void disable(int player) {
+            LinearLayout row = rows.get(player);
+            row.setOnClickListener(null);
+            row.setClickable(false);
+            row.setAlpha(0.3f);
+        }
+
+        @Override
+        public void setHint(String text) {
+            hint.setText(text);
+        }
+
+        @Override
+        public Button action() {
+            return action;
+        }
+
+        @Override
+        public Button back() {
+            return back;
+        }
+
+        @Override
+        public void close() {
+            screen.removeView(view);
         }
     }
 
