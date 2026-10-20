@@ -1090,7 +1090,7 @@ public final class GameFlow {
     private void openFouls(String at, Runnable rearm, Runnable afterRemoval) {
         foulsOpen = true;
         List<Integer> removed = new ArrayList<>();
-        GameUi.FoulView view = ui.showFouls(t("foul.title"), t("foul.hint"), game.alive());
+        GameUi.FoulView view = ui.showFouls(t("foul.title"), game.alive());
         for (int n = 1; n <= Game.PLAYER_COUNT; n++) {
             view.setRow(n, game.fouls(n), false);
         }
@@ -1132,11 +1132,9 @@ public final class GameFlow {
                 view.disable(n);
                 game.log().add(t("log.foulRemoved", n, count, at));
                 voice.say(t("voice.foulRemoved", n));
-                view.setHint(t("foul.removed", n));
             } else {
                 game.log().add(t("log.foul", n, count, at));
                 voice.say(t("voice.foul." + count, n));
-                view.setHint(t("foul.registered", n, foulsText(count)));
             }
             reset.run();
         };
@@ -1177,10 +1175,6 @@ public final class GameFlow {
         } else {
             action.run();
         }
-    }
-
-    private static String foulsText(int count) {
-        return Texts.plural("fouls", count);
     }
 
     // ───────────────────────────── Общие экраны ─────────────────────────────

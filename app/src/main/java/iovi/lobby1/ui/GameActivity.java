@@ -1,7 +1,9 @@
 package iovi.lobby1.ui;
 
 import android.animation.ObjectAnimator;
+import android.content.Context;
 import android.content.res.ColorStateList;
+import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -229,12 +231,13 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
     }
 
     @Override
-    public FoulView showFouls(String title, String hint, Collection<Integer> enabled) {
+    public FoulView showFouls(String title, Collection<Integer> enabled) {
         // Поверх текущего экрана, не заменяя его: после «Назад» экран под ним снова виден как был.
         View v = LayoutInflater.from(this).inflate(R.layout.screen_fouls, screen, false);
         screen.addView(v);
+        // Строка фазы на экране фолов не нужна — таблице нужно место.
+        phaseLabel.setVisibility(View.GONE);
         this.<TextView>find(v, R.id.title).setText(title);
-        this.<TextView>find(v, R.id.hint).setText(hint);
         return new FoulScreen(v, enabled);
     }
 
@@ -270,6 +273,7 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
     /** Заменяет текущий экран. */
     private View show(int layout) {
         screen.removeAllViews();
+        phaseLabel.setVisibility(View.VISIBLE);
         View v = LayoutInflater.from(this).inflate(layout, screen, false);
         screen.addView(v);
         return v;
@@ -371,6 +375,14 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
         @Override
         public void setPaused(boolean paused) {
             pause.setText(paused ? R.string.resume : R.string.pause);
+            // На паузе «Продолжить» — красная, как основная кнопка: это главное действие на экране.
+            Context c = pause.getContext();
+            pause.setBackgroundTintList(paused
+                    ? ColorStateList.valueOf(ContextCompat.getColor(c, R.color.accent))
+                    : ColorStateList.valueOf(Color.TRANSPARENT));
+            pause.setTextColor(ContextCompat.getColor(c, paused ? R.color.white : R.color.text_primary));
+            pause.setStrokeColor(ColorStateList.valueOf(ContextCompat.getColor(c,
+                    paused ? R.color.accent : R.color.card_border)));
         }
 
         @Override
@@ -660,14 +672,12 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
         private final View view;
         private final Map<Integer, LinearLayout> rows = new HashMap<>();
         private final Map<Integer, ImageView[]> cells = new HashMap<>();
-        private final TextView hint;
         private final Button action;
         private final ActionButton back;
         private IntConsumer listener;
 
         FoulScreen(View v, Collection<Integer> enabled) {
             view = v;
-            hint = v.findViewById(R.id.hint);
             action = new ActionButton(v.findViewById(R.id.action));
             back = new ActionButton(v.findViewById(R.id.back));
             LinearLayout container = v.findViewById(R.id.rows);
@@ -748,11 +758,6 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
         }
 
         @Override
-        public void setHint(String text) {
-            hint.setText(text);
-        }
-
-        @Override
         public Button action() {
             return action;
         }
@@ -765,6 +770,7 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
         @Override
         public void close() {
             screen.removeView(view);
+            phaseLabel.setVisibility(View.VISIBLE);
         }
     }
 

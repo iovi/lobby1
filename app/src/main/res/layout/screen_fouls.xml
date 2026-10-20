@@ -11,12 +11,6 @@
         android:id="@+id/title"
         style="@style/Title" />
 
-    <TextView
-        android:id="@+id/hint"
-        style="@style/Body"
-        android:layout_marginTop="4dp"
-        android:textSize="15sp" />
-
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -30,15 +24,27 @@
             android:orientation="vertical" />
     </ScrollView>
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/back"
-        style="@style/SecondaryButton"
+    <!-- «Назад» и подтверждение в один ряд — меньше места под таблицей. -->
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_weight="0"
+        android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
-        android:layout_marginBottom="12dp" />
+        android:orientation="horizontal">
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/action"
-        style="@style/MainButton" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/back"
+            style="@style/SecondaryButton"
+            android:layout_height="64dp"
+            android:layout_marginEnd="6dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/action"
+            style="@style/MainButton"
+            android:layout_width="0dp"
+            android:layout_height="64dp"
+            android:layout_weight="2"
+            android:layout_marginStart="6dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp" />
+    </LinearLayout>
 </LinearLayout>

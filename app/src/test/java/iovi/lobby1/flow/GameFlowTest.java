@@ -1040,7 +1040,7 @@ public class GameFlowTest {
         }
 
         @Override
-        public FoulView showFouls(String title, String hint, Collection<Integer> enabled) {
+        public FoulView showFouls(String title, Collection<Integer> enabled) {
             Screen below = current;
             Screen fouls = new Screen("fouls", title);
             fouls.grid = new FakeGrid(enabled);

@@ -144,8 +144,6 @@ public interface GameUi {
         /** Строку больше нельзя нажать — игрок не за столом. */
         void disable(int player);
 
-        void setHint(String text);
-
         Button action();
 
         Button back();
@@ -178,7 +176,7 @@ public interface GameUi {
                               Map<Protocol.Mark, String> labels);
 
     /** Строки для всех игроков; enabled — кому можно поставить фол, остальные строки бледные. */
-    FoulView showFouls(String title, String hint, Collection<Integer> enabled);
+    FoulView showFouls(String title, Collection<Integer> enabled);
 
     /** Диалог поверх экрана: onYes или onNo (в том числе при закрытии диалога) вызывается ровно один раз. */
     void confirm(String title, String message, String yes, String no, Runnable onYes, Runnable onNo);
