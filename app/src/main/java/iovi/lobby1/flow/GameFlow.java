@@ -72,8 +72,8 @@ public final class GameFlow {
     private final List<Integer> turnLocked = new ArrayList<>();
     /** Чёрные, выбравшие промах этой ночью. */
     private final Set<Integer> missed = new HashSet<>();
-    /** Строка лучшего хода для итога партии; null — лучшего хода не было. */
-    private String bestMoveSummary;
+    /** Строки лучших ходов для итога партии, в порядке выбывания. */
+    private final List<String> bestMoveSummaries = new ArrayList<>();
     /** Строки протоколов для итога партии, в порядке выбывания. */
     private final List<String> protocolSummaries = new ArrayList<>();
 
@@ -281,8 +281,7 @@ public final class GameFlow {
                 String text = t("vote.single", x);
                 game.log().add(t("log.single", x));
                 voice.say(text);
-                showMessage(t("vote.title"), text, t("button.farewell"),
-                        () -> farewells(voting.eliminated(), this::startNight));
+                showVotedOut(t("vote.title"), text, voting.eliminated());
                 break;
             }
             default: {
@@ -364,8 +363,7 @@ public final class GameFlow {
                 String text = t("vote.eliminated", x);
                 game.log().add(t("log.eliminated", x));
                 voice.say(text);
-                showMessage(t("vote.resultTitle"), t("vote.result", summary, text), t("button.farewell"),
-                        () -> farewells(voting.eliminated(), this::startNight));
+                showVotedOut(t("vote.resultTitle"), t("vote.result", summary, text), voting.eliminated());
                 break;
             }
             case TIE_SPEECHES: {
@@ -410,8 +408,7 @@ public final class GameFlow {
             if (lifted) {
                 String text = t("vote.lifted", list);
                 voice.say(text);
-                showMessage(t("vote.resultTitle"), t("vote.result", tally, text), t("button.farewell"),
-                        () -> farewells(voting.eliminated(), this::startNight));
+                showVotedOut(t("vote.resultTitle"), t("vote.result", tally, text), voting.eliminated());
             } else {
                 String text = t("vote.notLifted");
                 voice.say(text);
@@ -429,13 +426,42 @@ public final class GameFlow {
 
     // ──────────────────────── Выбывание и прощальная минута ────────────────────────
 
-    /** Выводит игроков из игры, даёт каждому прощальную минуту и проверяет победу. */
-    private void farewells(List<Integer> players, Runnable then) {
+    /**
+     * Единственный заголосованный в нулевом круге (первый день) делает лучший ход и оставляет протокол;
+     * поднятые вместе в первый день и заголосованные в остальные дни — только прощальная минута.
+     */
+    private void votedOut(List<Integer> players) {
+        boolean lastWords = lastWords(players);
+        farewells(players, lastWords, lastWords, this::startNight);
+    }
+
+    /** Заголосован один игрок в нулевом круге — ему положены лучший ход и протокол. */
+    private boolean lastWords(List<Integer> votedOut) {
+        return game.dayNumber() == 1 && votedOut.size() == 1;
+    }
+
+    /**
+     * Итог голосования с выбыванием и кнопка «Прощальная минута». Единственному заголосованному
+     * в нулевом круге телефон передаётся сразу — экран лучшего хода без промежуточной кнопки.
+     */
+    private void showVotedOut(String title, String text, List<Integer> players) {
+        if (lastWords(players)) {
+            votedOut(players);
+        } else {
+            showMessage(title, text, t("button.farewell"), () -> votedOut(players));
+        }
+    }
+
+    /**
+     * Выводит игроков из игры и по очереди провожает каждого: лучший ход (если положен),
+     * прощальная минута, протокол (если положен). Затем проверяет победу.
+     */
+    private void farewells(List<Integer> players, boolean withBestMove, boolean withProtocol, Runnable then) {
         List<Integer> leaving = new ArrayList<>(players);
         for (int x : leaving) {
             game.eliminate(x);
         }
-        farewell(leaving, 0, () -> {
+        farewell(leaving, 0, withBestMove, withProtocol, () -> {
             Game.Winner winner = game.winner();
             if (winner == Game.Winner.NONE) {
                 then.run();
@@ -445,15 +471,38 @@ public final class GameFlow {
         });
     }
 
-    private void farewell(List<Integer> leaving, int i, Runnable then) {
+    private void farewell(List<Integer> leaving, int i, boolean withBestMove, boolean withProtocol, Runnable then) {
         if (i >= leaving.size()) {
             then.run();
             return;
         }
         int x = leaving.get(i);
+        Runnable next = () -> farewell(leaving, i + 1, withBestMove, withProtocol, then);
+        Runnable speech = () -> farewellSpeech(x, withProtocol ? () -> protocol(x, next) : () -> left(x, next));
+        if (withBestMove) {
+            bestMove(x, speech);
+        } else {
+            speech.run();
+        }
+    }
+
+    private void farewellSpeech(int x, Runnable then) {
         voice.say(t("voice.farewell", x));
         showTimer(t("farewell.title"), t("farewell.subtitle", x), FAREWELL_MS, true,
-                t("voice.farewellEnd", x), () -> protocol(x, () -> farewell(leaving, i + 1, then)));
+                t("voice.farewellEnd", x), then);
+    }
+
+    /**
+     * Выбывший без протокола покинул стол: здесь, как и после протокола, партию можно завершить досрочно.
+     * Если победитель уже есть, экран не нужен — игра закончится и так.
+     */
+    private void left(int x, Runnable then) {
+        if (game.winner() != Game.Winner.NONE) {
+            then.run();
+            return;
+        }
+        GameUi.MessageView view = showMessage(t("left.title"), t("left.text", x), t("left.next"), then);
+        offerStop(view.showExtra(t("stop.button")));
     }
 
     // ───────────────────────────── Протокол ─────────────────────────────
@@ -512,10 +561,14 @@ public final class GameFlow {
             action.setOnClick(then);
             // После выбывания партию можно завершить досрочно; если победитель уже есть, игра закончится и так.
             if (game.winner() == Game.Winner.NONE) {
-                GameUi.Button stop = view.showExtra(t("stop.button"));
-                stop.setOnClick(() -> confirmStop(stop));
+                offerStop(view.showExtra(t("stop.button")));
             }
         });
+    }
+
+    /** Кнопка «Завершить игру»: досрочное завершение после подтверждения. */
+    private void offerStop(GameUi.Button stop) {
+        stop.setOnClick(() -> confirmStop(stop));
     }
 
     /** Диалог подтверждения; при отказе кнопка «Завершить игру» снова работает. */
@@ -815,17 +868,18 @@ public final class GameFlow {
             game.log().add(t("log.killed", killed));
             String text = t("morning.killed", killed);
             voice.say(t("voice.morning", text));
-            Runnable farewell = () -> farewells(Collections.singletonList(killed), this::startDay);
+            // Убитый ночью оставляет протокол; убитый в первую ночь перед прощальной речью делает лучший ход —
+            // телефон ему передаётся сразу, без промежуточной кнопки.
+            Runnable farewell = () -> farewells(Collections.singletonList(killed), game.dayNumber() == 1, true, this::startDay);
             if (game.dayNumber() == 1) {
-                // Убитый в первую ночь перед прощальной речью делает лучший ход.
-                showMessage(t("morning.title"), text, t("button.bestMove"), () -> bestMove(killed, farewell));
+                farewell.run();
             } else {
                 showMessage(t("morning.title"), text, t("button.farewell"), farewell);
             }
         }
     }
 
-    /** Лучший ход: убитый в первую ночь называет трёх игроков, которых считает мафией. */
+    /** Лучший ход: убитый в первую ночь или заголосованный в нулевом круге называет трёх игроков, которых считает мафией. */
     private void bestMove(int n, Runnable then) {
         voice.say(t("voice.bestMove", n));
         showHandoff(t("bestMove.title"), n, t("bestMove.handoffHint"), t("bestMove.start"),
@@ -872,7 +926,7 @@ public final class GameFlow {
                     black++;
                 }
             }
-            bestMoveSummary = t("log.bestMoveSummary", n, list, black);
+            bestMoveSummaries.add(t("log.bestMoveSummary", n, list, black));
             voice.say(t("voice.bestMoveResult", n, list));
             view.showResult(list);
             action.setText(t("button.farewell"));
@@ -899,8 +953,8 @@ public final class GameFlow {
         music.stop();
         game.log().section(t("log.result"));
         game.log().add(title);
-        if (bestMoveSummary != null) {
-            game.log().add(bestMoveSummary);
+        for (String summary : bestMoveSummaries) {
+            game.log().add(summary);
         }
         for (String summary : protocolSummaries) {
             game.log().add(summary);
@@ -927,7 +981,7 @@ public final class GameFlow {
         voice.say(t("voice.callPlayer", n));
     }
 
-    private GameUi.Button showMessage(String title, String text, String button, Runnable next) {
+    private GameUi.MessageView showMessage(String title, String text, String button, Runnable next) {
         newScreen();
         return ui.showMessage(title, text, button, next);
     }

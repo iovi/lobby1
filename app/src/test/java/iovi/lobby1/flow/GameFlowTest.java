@@ -64,8 +64,9 @@ public class GameFlowTest {
         assertTrue(log, log.contains("Поднять всех (7, 8, 9): за 5 из 9 — покидают стол"));
         assertTrue(log, log.contains("Лучший ход игрока 6: 1, 2, 3 — угадано мафии: 3 из 3"));
         assertTrue(log, log.contains("Протокол игрока 6: красные — 5; чёрные — 1, 2, 3; шериф — 4"));
-        assertTrue(log, log.contains("Игрок 7 не оставил протокол"));
-        assertTrue(log, log.contains("Игрок 9 не оставил протокол"));
+        // Заголосованные не в нулевом круге протокол не оставляют.
+        assertFalse(log, log.contains("Игрок 7 не оставил протокол"));
+        assertFalse(log, log.contains("Игрок 9 не оставил протокол"));
         assertTrue(log, log.endsWith("Победила мафия\n  Лучший ход игрока 6: 1, 2, 3 — угадано мафии: 3 из 3"
                 + "\n  Протокол игрока 6: красные — 5; чёрные — 1, 2, 3; шериф — 4. Верно: 5 из 5"));
         assertEquals("Победила мафия", table.ui.gameOverTitle);
@@ -83,13 +84,17 @@ public class GameFlowTest {
         assertEquals("Кто за то, чтобы все игроки 7, 8, 9 покинули стол?",
                 said.get(said.lastIndexOf("9, кто за 9?") + 2));
         assertTrue(said.contains("Лучший ход игрока 6: номера 1, 2, 3."));
+        // Убитому в первую ночь телефон передаётся сразу после утреннего объявления, без кнопки «Лучший ход».
+        assertFalse(table.ui.messageButtons.contains("Лучший ход"));
+        assertTrue(said.indexOf("Игрок 6, ваш лучший ход.") > said.indexOf("Наступает утро. Ночью убит игрок 6."));
         assertTrue(said.contains("Игрок 6, ваш протокол."));
         int protocolAt = said.indexOf("Протокол.");
         assertEquals(Arrays.asList("Протокол.",
                         PAUSE, "5 — красный.", PAUSE, "1 — чёрный.", PAUSE, "2 — чёрный.", PAUSE, "3 — чёрный.",
                         PAUSE, "4 — шериф."),
                 said.subList(protocolAt, protocolAt + 11));
-        assertTrue(said.contains("Протокол не оставлен."));
+        assertFalse(said.contains("Протокол не оставлен."));
+        assertFalse(said.contains("Игрок 7, ваш протокол."));
         assertTrue(said.indexOf("Спасибо, игрок 6.") < said.indexOf("Игрок 6, ваш протокол."));
         assertEquals("Игра окончена. Победила мафия!", said.get(said.size() - 1));
         assertFalse(table.music.playing);
@@ -118,6 +123,66 @@ public class GameFlowTest {
         assertTrue(log, log.contains("Убит игрок 4"));
         assertTrue(log, log.contains("Единственная кандидатура — игрок 3 покидает стол"));
         assertFalse(log, log.contains("Лучший ход"));
+        assertEquals("Победили мирные жители", table.ui.gameOverTitle);
+    }
+
+    /**
+     * День 1: выставлены 5 и 7, 6 голосов против 4 — уходит 5: лучший ход, прощальная минута, протокол.
+     * Ночами промахи; со второго дня чёрные уходят по одному без лучшего хода и протокола.
+     */
+    @Test
+    public void votedOutOnFirstDayGetsBestMoveAndProtocol() {
+        Map<Integer, Map<Integer, Integer>> nominations = new HashMap<>();
+        nominations.put(1, map(1, 5, 2, 7));
+        nominations.put(2, map(8, 1));
+        nominations.put(3, map(8, 2));
+        nominations.put(4, map(8, 3));
+        Table table = new Table(nominations, Arrays.asList(6), 0);
+        table.protocols.put(5, Arrays.asList(new Mark(1, Protocol.Mark.BLACK)));
+        table.play();
+
+        String log = table.game.log().toString();
+        assertTrue(log, log.contains("Голосование: 5 — 6, 7 — 4"));
+        assertTrue(log, log.contains("Лучший ход игрока 5: 1, 2, 3"));
+        assertTrue(log, log.contains("Протокол игрока 5: чёрные — 1"));
+        assertFalse(log, log.contains("Лучший ход игрока 1"));
+        assertFalse(log, log.contains("Игрок 1 не оставил протокол"));
+        assertTrue(log, log.endsWith("Победили мирные жители\n  Лучший ход игрока 5: 1, 2, 3 — угадано мафии: 3 из 3"
+                + "\n  Протокол игрока 5: чёрные — 1. Верно: 1 из 1"));
+        List<String> said = table.voice.said;
+        assertTrue(said.indexOf("Лучший ход игрока 5: номера 1, 2, 3.") < said.indexOf("Игрок 5, ваша прощальная минута."));
+        assertTrue(said.indexOf("Спасибо, игрок 5.") < said.indexOf("Игрок 5, ваш протокол."));
+        // После голосования сразу передача телефона для лучшего хода, без кнопки «Лучший ход».
+        assertFalse(table.ui.messageButtons.contains("Лучший ход"));
+        assertEquals("Победили мирные жители", table.ui.gameOverTitle);
+    }
+
+    /**
+     * День 1: 5 и 7 дважды поровну (5/5), «поднять всех» — 6 из 10, уходят оба: без лучшего хода
+     * и протокола, только прощальные минуты.
+     */
+    @Test
+    public void liftedTogetherOnFirstDayLeaveNoBestMoveOrProtocol() {
+        Map<Integer, Map<Integer, Integer>> nominations = new HashMap<>();
+        nominations.put(1, map(1, 5, 2, 7));
+        nominations.put(2, map(8, 1));
+        nominations.put(3, map(8, 2));
+        nominations.put(4, map(8, 3));
+        Table table = new Table(nominations, Arrays.asList(5, 5, 6), 0);
+        table.play();
+
+        String log = table.game.log().toString();
+        assertTrue(log, log.contains("Поднять всех (5, 7): за 6 из 10 — покидают стол"));
+        assertFalse(log, log.contains("Лучший ход"));
+        assertFalse(log, log.contains("Игрок 5 не оставил протокол"));
+        assertFalse(log, log.contains("Игрок 7 не оставил протокол"));
+        // Убитый ночью протокол оставляет по-прежнему.
+        assertTrue(log, log.contains("Игрок 4 не оставил протокол"));
+        List<String> said = table.voice.said;
+        assertTrue(said.contains("Игрок 5, ваша прощальная минута."));
+        assertTrue(said.contains("Игрок 7, ваша прощальная минута."));
+        assertFalse(said.contains("Игрок 5, ваш лучший ход."));
+        assertFalse(said.contains("Игрок 5, ваш протокол."));
         assertEquals("Победили мирные жители", table.ui.gameOverTitle);
     }
 
@@ -205,6 +270,22 @@ public class GameFlowTest {
         assertEquals("Игра завершена.", said.get(said.size() - 1));
     }
 
+    /** День 2: заголосован дон — протокола нет, «Завершить игру» на экране «покинул стол». */
+    @Test
+    public void stopGameAfterEliminationWithoutProtocol() {
+        Table table = new Table(blacksLeaveOneByOne(), Arrays.asList(), 0);
+        table.stopOnLeft = true;
+        table.ui.confirmAnswers.add(true);
+        table.play();
+
+        assertEquals(1, table.ui.confirmations);
+        assertEquals("Игра завершена досрочно", table.ui.gameOverTitle);
+        String log = table.game.log().toString();
+        assertTrue(log, log.contains("Единственная кандидатура — игрок 1 покидает стол"));
+        assertFalse(log, log.contains("протокол"));
+        assertFalse(log, log.contains("Ночь 2"));
+    }
+
     @Test
     public void plural() {
         assertEquals("1 голос", Texts.plural("votes", 1));
@@ -255,6 +336,8 @@ public class GameFlowTest {
         final Map<Integer, List<Mark>> protocols = new HashMap<>();
         /** Выбывший, который после своего протокола нажимает «Завершить игру»; 0 — никто. */
         int stopBy;
+        /** На экране «покинул стол» (выбывание без протокола) нажимают «Завершить игру». */
+        boolean stopOnLeft;
 
         Table(Map<Integer, Map<Integer, Integer>> nominations, List<Integer> votes, int shotTarget) {
             this.nominations = nominations;
@@ -324,6 +407,12 @@ public class GameFlowTest {
                         }
                     }
                     if (s.extra != null && ui.handoffPlayer == stopBy) {
+                        return s.extra.click();
+                    }
+                    return s.action.click();
+                }
+                case "message": {
+                    if (s.extra != null && stopOnLeft) {
                         return s.extra.click();
                     }
                     return s.action.click();
@@ -525,7 +614,7 @@ public class GameFlowTest {
 
     /** Текущий экран: всё, что на нём видно, и чем можно нажать. */
     private static final class Screen
-            implements GameUi.SpeechView, GameUi.VoteView, GameUi.NightView, GameUi.ProtocolView {
+            implements GameUi.SpeechView, GameUi.VoteView, GameUi.NightView, GameUi.ProtocolView, GameUi.MessageView {
         final String kind;
         final String title;
         FakeButton action;
@@ -637,20 +726,23 @@ public class GameFlowTest {
         /** Ответы на диалоги подтверждения по порядку: true — «да». */
         final Deque<Boolean> confirmAnswers = new ArrayDeque<>();
         int confirmations;
+        /** Кнопки показанных сообщений по порядку; null — сообщение без кнопки. */
+        final List<String> messageButtons = new ArrayList<>();
 
         @Override
         public void setPhase(String label) {
         }
 
         @Override
-        public Button showMessage(String title, String text, String button, Runnable next) {
+        public MessageView showMessage(String title, String text, String button, Runnable next) {
             current = new Screen("message", title);
             current.action = new FakeButton();
+            messageButtons.add(button);
             if (button != null) {
                 current.action.setText(button);
                 current.action.setOnClick(next);
             }
-            return current.action;
+            return current;
         }
 
         @Override

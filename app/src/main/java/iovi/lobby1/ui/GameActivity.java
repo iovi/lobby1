@@ -128,7 +128,7 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
     }
 
     @Override
-    public Button showMessage(String title, String text, String button, Runnable next) {
+    public MessageView showMessage(String title, String text, String button, Runnable next) {
         View v = show(R.layout.screen_message);
         this.<TextView>find(v, R.id.title).setText(title);
         TextView textView = v.findViewById(R.id.text);
@@ -144,7 +144,20 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
             action.setText(button);
             action.setOnClick(next);
         }
-        return action;
+        ActionButton extra = new ActionButton(v.findViewById(R.id.extra));
+        return new MessageView() {
+            @Override
+            public Button action() {
+                return action;
+            }
+
+            @Override
+            public Button showExtra(String extraText) {
+                extra.setText(extraText);
+                extra.view.setVisibility(View.VISIBLE);
+                return extra;
+            }
+        };
     }
 
     @Override

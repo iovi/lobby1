@@ -112,10 +112,18 @@ public interface GameUi {
         Button showExtra(String text);
     }
 
+    /** Сообщение: текст, основная кнопка и дополнительная под ней. */
+    interface MessageView {
+        Button action();
+
+        /** Показывает дополнительную кнопку под основной. */
+        Button showExtra(String text);
+    }
+
     void setPhase(String label);
 
     /** text или button равны null — соответствующая часть экрана скрыта. */
-    Button showMessage(String title, String text, String button, Runnable next);
+    MessageView showMessage(String title, String text, String button, Runnable next);
 
     void showHandoff(String title, int player, String hint, String button, Runnable next);
 
