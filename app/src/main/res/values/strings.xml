@@ -3,6 +3,8 @@
     <string name="main_subtitle">Ведущий для спортивной мафии на 10 игроков</string>
     <string name="new_game">Новая игра</string>
     <string name="settings">Настройки</string>
+    <string name="pin">Закрепить приложение</string>
+    <string name="pinned">Приложение закреплено</string>
     <string name="music_none">Ночная музыка не выбрана</string>
     <string name="music_selected">Ночная музыка: %1$s</string>
 

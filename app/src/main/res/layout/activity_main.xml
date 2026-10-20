@@ -30,15 +30,23 @@
         android:textSize="15sp" />
 
     <com.google.android.material.button.MaterialButton
-        android:id="@+id/newGame"
+        android:id="@+id/pin"
         style="@style/MainButton"
-        android:text="@string/new_game" />
+        android:layout_marginBottom="12dp"
+        android:backgroundTint="@color/surface"
+        android:text="@string/pin" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/settings"
         style="@style/MainButton"
-        android:layout_marginTop="12dp"
+        android:layout_marginBottom="12dp"
         android:backgroundTint="@color/surface"
         android:text="@string/settings" />
+
+    <!-- Основная кнопка — внизу, как на экранах партии. -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/newGame"
+        style="@style/MainButton"
+        android:text="@string/new_game" />
 </LinearLayout>
 </FrameLayout>
