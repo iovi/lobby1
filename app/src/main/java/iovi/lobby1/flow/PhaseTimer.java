@@ -4,10 +4,10 @@ import java.util.Locale;
 
 /** Обратный отсчёт с паузой и сигналом «осталось 10 секунд». */
 public final class PhaseTimer {
-    static final long WARNING_MS = 10_000;
+    public static final long WARNING_MS = 10_000;
     private static final long TICK_MS = 200;
 
-    interface Listener {
+    public interface Listener {
         void onTick(long remainingMs);
 
         void onWarning();
@@ -45,11 +45,11 @@ public final class PhaseTimer {
         }
     };
 
-    PhaseTimer(Scheduler scheduler) {
+    public PhaseTimer(Scheduler scheduler) {
         this.scheduler = scheduler;
     }
 
-    void start(long durationMs, Listener listener) {
+    public void start(long durationMs, Listener listener) {
         cancel();
         this.listener = listener;
         this.remainingMs = durationMs;
@@ -59,7 +59,7 @@ public final class PhaseTimer {
         resume();
     }
 
-    void pause() {
+    public void pause() {
         if (!running) {
             return;
         }
@@ -68,7 +68,7 @@ public final class PhaseTimer {
         running = false;
     }
 
-    void resume() {
+    public void resume() {
         if (running || listener == null) {
             return;
         }
@@ -78,7 +78,7 @@ public final class PhaseTimer {
     }
 
     /** Добавляет время к идущему или стоящему на паузе отсчёту; «10 секунд» прозвучит снова. */
-    void extend(long ms) {
+    public void extend(long ms) {
         if (listener == null) {
             return;
         }
@@ -90,11 +90,11 @@ public final class PhaseTimer {
         listener.onTick(current);
     }
 
-    boolean isRunning() {
+    public boolean isRunning() {
         return running;
     }
 
-    void cancel() {
+    public void cancel() {
         scheduler.cancel(tick);
         running = false;
         listener = null;
