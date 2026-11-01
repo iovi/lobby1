@@ -11,8 +11,6 @@ import iovi.lobby1.flow.Music;
 /** Зацикленная фоновая музыка ночных фаз из файла, выбранного в настройках. */
 public final class NightMusic implements Music {
     private static final String TAG = "NightMusic";
-    private static final float FULL_VOLUME = 1.0f;
-    private static final float DUCKED_VOLUME = 0.2f;
 
     public interface ErrorListener {
         void onMusicError();
@@ -106,9 +104,16 @@ public final class NightMusic implements Music {
         applyVolume();
     }
 
-    private void applyVolume() {
+    /**
+     * Громкость из настроек: доля от системной громкости медиа, на которой звучит и голос, —
+     * музыку можно сделать только тише голоса, не громче.
+     */
+    public void applyVolume() {
         if (player != null && prepared) {
-            float v = ducked ? DUCKED_VOLUME : FULL_VOLUME;
+            float v = MusicPrefs.level(context) / 100f;
+            if (ducked) {
+                v *= MusicPrefs.duck(context) / 100f;
+            }
             player.setVolume(v, v);
         }
     }

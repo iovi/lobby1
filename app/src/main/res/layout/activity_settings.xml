@@ -5,8 +5,13 @@
     android:layout_height="match_parent"
     android:fitsSystemWindows="true">
 
+<ScrollView
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
 <LinearLayout
     style="@style/Screen"
+    android:layout_height="wrap_content"
     android:orientation="vertical"
     android:gravity="top">
 
@@ -51,5 +56,114 @@
         android:layout_weight="0"
         android:layout_marginTop="12dp"
         android:text="@string/settings_clear" />
+
+    <TextView
+        style="@style/Title"
+        android:layout_marginTop="40dp"
+        android:text="@string/settings_level_title" />
+
+    <TextView
+        style="@style/Body"
+        android:layout_marginTop="12dp"
+        android:text="@string/settings_level_hint"
+        android:textSize="15sp" />
+
+    <!-- Варианты столбиком: в ряд не помещаются при крупном шрифте. -->
+    <RadioGroup
+        android:id="@+id/level"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp">
+
+        <RadioButton
+            android:id="@+id/level100"
+            style="@style/Option"
+            android:text="@string/settings_level_100" />
+
+        <RadioButton
+            android:id="@+id/level75"
+            style="@style/Option"
+            android:text="@string/settings_level_75" />
+
+        <RadioButton
+            android:id="@+id/level50"
+            style="@style/Option"
+            android:text="@string/settings_level_50" />
+
+        <RadioButton
+            android:id="@+id/level25"
+            style="@style/Option"
+            android:text="@string/settings_level_25" />
+    </RadioGroup>
+
+    <TextView
+        style="@style/Title"
+        android:layout_marginTop="40dp"
+        android:text="@string/settings_duck_title" />
+
+    <TextView
+        style="@style/Body"
+        android:layout_marginTop="12dp"
+        android:text="@string/settings_duck_hint"
+        android:textSize="15sp" />
+
+    <RadioGroup
+        android:id="@+id/duck"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp">
+
+        <RadioButton
+            android:id="@+id/duck20"
+            style="@style/Option"
+            android:text="@string/settings_duck_20" />
+
+        <RadioButton
+            android:id="@+id/duck50"
+            style="@style/Option"
+            android:text="@string/settings_duck_50" />
+
+        <RadioButton
+            android:id="@+id/duck80"
+            style="@style/Option"
+            android:text="@string/settings_duck_80" />
+    </RadioGroup>
+
+    <TextView
+        style="@style/Title"
+        android:layout_marginTop="40dp"
+        android:text="@string/settings_night_title" />
+
+    <TextView
+        style="@style/Body"
+        android:layout_marginTop="12dp"
+        android:text="@string/settings_night_hint"
+        android:textSize="15sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="16dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/nightLess"
+            style="@style/SecondaryButton"
+            android:text="@string/settings_less" />
+
+        <TextView
+            android:id="@+id/nightTurn"
+            style="@style/Title"
+            android:layout_width="0dp"
+            android:layout_weight="1" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/nightMore"
+            style="@style/SecondaryButton"
+            android:text="@string/settings_more" />
+    </LinearLayout>
 </LinearLayout>
+</ScrollView>
 </FrameLayout>

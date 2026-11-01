@@ -23,11 +23,6 @@ import iovi.lobby1.game.Role;
  * (номер стрелявшего → цель); промах в них не попадает.
  */
 public final class NightPhase extends Phase {
-    /**
-     * Отсчёт ночного хода, одинаковый для всех ролей: действия принимаются только до его конца,
-     * а передать ход можно только после. По времени хода роль не вычислить.
-     */
-    private static final long NIGHT_TURN_MS = 8_000;
     /** Пауза после последнего ночного хода — положить телефон на стол. */
     private static final long NIGHT_END_PAUSE_MS = 5_000;
     /** Выбор промаха вместо номера цели в {@link #pickShot}. */
@@ -35,6 +30,11 @@ public final class NightPhase extends Phase {
 
     /** Ночные выстрелы: номер стрелявшего → цель. */
     private final Map<Integer, Integer> shots = new HashMap<>();
+    /**
+     * Отсчёт ночного хода (из настроек), одинаковый для всех ролей: действия принимаются только до его
+     * конца, а передать ход можно только после. По времени хода роль не вычислить.
+     */
+    private final long turnMs;
     /** Чёрные, выбравшие промах этой ночью. */
     private final Set<Integer> missed = new HashSet<>();
     private List<Integer> order;
@@ -50,6 +50,7 @@ public final class NightPhase extends Phase {
 
     public NightPhase(Host host) {
         super(host);
+        turnMs = host.nightTurnMs;
     }
 
     /** done — после паузы за последним ходом, когда телефон уже на столе. */
@@ -68,7 +69,7 @@ public final class NightPhase extends Phase {
         int n = order.get(i);
         screens.callPlayer(n);
         screens.handoff(t("night.handoff", i + 1, order.size()), n,
-                t("night.handoffHint", seconds(NIGHT_TURN_MS)),
+                t("night.handoffHint", seconds(turnMs)),
                 t("night.iAm", n), () -> startNightTurn(i));
     }
 
@@ -79,9 +80,9 @@ public final class NightPhase extends Phase {
         turnOpen = true;
         turnChecked = false;
         turnLocked.clear();
-        turnRemainingMs = NIGHT_TURN_MS;
+        turnRemainingMs = turnMs;
         nightAction(n);
-        screens.timer().start(NIGHT_TURN_MS, new PhaseTimer.Listener() {
+        screens.timer().start(turnMs,new PhaseTimer.Listener() {
             @Override
             public void onTick(long remainingMs) {
                 turnRemainingMs = remainingMs;

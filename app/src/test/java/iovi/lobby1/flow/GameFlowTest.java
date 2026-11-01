@@ -487,7 +487,7 @@ public class GameFlowTest {
         final FakeVoice voice = new FakeVoice();
         final FakeMusic music = new FakeMusic();
         final FakeUi ui = new FakeUi();
-        final GameFlow flow = new GameFlow(game, ui, voice, music, scheduler);
+        final GameFlow flow = new GameFlow(game, ui, voice, music, scheduler, 8_000);
         /** День → (говорящий → кого выставляет). */
         final Map<Integer, Map<Integer, Integer>> nominations;
         final Deque<Integer> votes;

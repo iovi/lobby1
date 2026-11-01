@@ -13,16 +13,20 @@ public final class Host {
     final Voice voice;
     final Music music;
     final Scheduler scheduler;
+    /** Отсчёт ночного хода — из настроек. */
+    final long nightTurnMs;
     public final Screens screens;
     public final Fouls fouls;
     public final Summaries summaries = new Summaries();
 
-    public Host(Game game, GameUi ui, Voice voice, Music music, Scheduler scheduler, Fouls.Listener onFoulRemoval) {
+    public Host(Game game, GameUi ui, Voice voice, Music music, Scheduler scheduler, long nightTurnMs,
+                Fouls.Listener onFoulRemoval) {
         this.game = game;
         this.ui = ui;
         this.voice = voice;
         this.music = music;
         this.scheduler = scheduler;
+        this.nightTurnMs = nightTurnMs;
         this.screens = new Screens(ui, voice, scheduler);
         this.fouls = new Fouls(game, ui, voice, screens, onFoulRemoval);
     }

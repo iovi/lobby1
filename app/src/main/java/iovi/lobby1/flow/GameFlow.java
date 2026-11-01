@@ -35,12 +35,13 @@ public final class GameFlow {
     /** Идёт день — в строке фазы число игроков за столом. */
     private boolean inDay;
 
-    public GameFlow(Game game, GameUi ui, Voice voice, Music music, Scheduler scheduler) {
+    /** nightTurnMs — отсчёт ночного хода, одинаковый для всех ролей. */
+    public GameFlow(Game game, GameUi ui, Voice voice, Music music, Scheduler scheduler, long nightTurnMs) {
         this.game = game;
         this.ui = ui;
         this.voice = voice;
         this.music = music;
-        this.host = new Host(game, ui, voice, music, scheduler, this::onFoulRemoval);
+        this.host = new Host(game, ui, voice, music, scheduler, nightTurnMs, this::onFoulRemoval);
     }
 
     public void start() {

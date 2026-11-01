@@ -9,12 +9,28 @@
     <string name="music_selected">Ночная музыка: %1$s</string>
 
     <string name="settings_music_title">Музыка для ночи</string>
-    <string name="settings_music_hint">Играет во время раздачи карт, договорки, свободной посадки и игровых ночей. Пока звучат объявления, музыка приглушается.</string>
+    <string name="settings_music_hint">Играет во время раздачи карт, договорки, свободной посадки и игровых ночей.</string>
     <string name="settings_pick">Выбрать файл</string>
     <string name="settings_preview">Прослушать</string>
     <string name="settings_stop">Остановить</string>
     <string name="settings_clear">Убрать музыку</string>
     <string name="music_error">Не удалось воспроизвести выбранный музыкальный файл</string>
+    <string name="settings_level_title">Громкость музыки</string>
+    <string name="settings_level_hint">Относительно голоса. Общую громкость голоса и музыки задают кнопки громкости телефона.</string>
+    <string name="settings_level_100">Как голос</string>
+    <string name="settings_level_75">75%</string>
+    <string name="settings_level_50">50%</string>
+    <string name="settings_level_25">25%</string>
+    <string name="settings_duck_title">Музыка во время объявлений</string>
+    <string name="settings_duck_hint">Доля от громкости музыки, пока звучат объявления.</string>
+    <string name="settings_duck_20">20%</string>
+    <string name="settings_duck_50">50%</string>
+    <string name="settings_duck_80">80%</string>
+    <string name="settings_night_title">Ночной ход</string>
+    <string name="settings_night_hint">Сколько секунд у каждого игрока на ночной ход. Время одинаковое для всех ролей.</string>
+    <string name="settings_night_value">%1$d с</string>
+    <string name="settings_less">−</string>
+    <string name="settings_more">+</string>
 
     <string name="pause">Пауза</string>
     <string name="resume">Продолжить</string>

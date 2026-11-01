@@ -76,7 +76,8 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
             }
         });
 
-        flow = new GameFlow(new Game(new SecureRandom()), this, announcer, music, new HandlerScheduler());
+        flow = new GameFlow(new Game(new SecureRandom()), this, announcer, music, new HandlerScheduler(),
+                GamePrefs.nightTurnSeconds(this) * 1000L);
         flow.start();
     }
 
