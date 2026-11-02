@@ -12,6 +12,7 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.GridLayout;
@@ -221,6 +222,11 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
         progress.setAlpha(0);
         countdown.setStartDelay(reveal);
         countdown.setDuration(Math.max(0, durationMs - reveal)).start();
+        // Маленькая карта стоит на месте рубашки — для нижних рядов это за внутренними отступами экрана карты,
+        // а при повороте перспектива выносит её край ещё дальше. Ничего не обрезаем.
+        ViewGroup root = (ViewGroup) v;
+        root.setClipChildren(false);
+        root.setClipToPadding(false);
         revealFromDeck(v.findViewById(R.id.card), from, deck, progress);
     }
 
@@ -259,10 +265,15 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
         this.<TextView>find(v, R.id.title).setText(title);
         this.<TextView>find(v, R.id.hint).setText(hint);
         LinearLayout deck = v.findViewById(R.id.deck);
+        // При повороте перспектива выносит ближний край карты за ячейку — не обрезаем его.
+        ((ViewGroup) v).setClipChildren(false);
+        ((ViewGroup) v).setClipToPadding(false);
+        deck.setClipChildren(false);
         boolean[] picked = {false};
         for (int row = 0; row < taken.length / DECK_COLUMNS; row++) {
             LinearLayout line = new LinearLayout(this);
             line.setOrientation(LinearLayout.HORIZONTAL);
+            line.setClipChildren(false);
             LinearLayout.LayoutParams lineParams = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, 0, 1);
             if (row > 0) {
