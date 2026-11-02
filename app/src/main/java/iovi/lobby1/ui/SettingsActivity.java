@@ -11,14 +11,19 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 
+import java.util.Arrays;
 import java.util.function.IntConsumer;
 
 import iovi.lobby1.R;
 import iovi.lobby1.audio.MusicPrefs;
+import iovi.lobby1.flow.Rules;
 
-/** Настройки: музыка для ночных фаз, её приглушение под объявления, время ночного хода. */
+/** Настройки: версия правил, музыка для ночных фаз и её приглушение под объявления, время ночного хода. */
 public class SettingsActivity extends AppCompatActivity {
-    /** Кнопки вариантов → проценты; порядок — как в разметке. */
+    /** Кнопки вариантов → значения; порядок — как в разметке. */
+    private static final int[] RULES_IDS = {R.id.rulesFsm, R.id.rulesMsl};
+    private static final Rules[] RULES = {Rules.FSM, Rules.MSL};
+    private static final int[] RULES_INDEXES = {0, 1};
     private static final int[] DUCK_IDS = {R.id.duck20, R.id.duck50, R.id.duck80};
     private static final int[] DUCKS = {20, 50, 80};
 
@@ -38,6 +43,9 @@ public class SettingsActivity extends AppCompatActivity {
 
         findViewById(R.id.pick).setOnClickListener(v -> picker.launch(new String[]{"audio/*"}));
 
+        bindOptions(findViewById(R.id.rules), RULES_IDS, RULES_INDEXES,
+                Arrays.asList(RULES).indexOf(GamePrefs.rules(this)),
+                index -> GamePrefs.saveRules(this, RULES[index]));
         bindOptions(findViewById(R.id.duck), DUCK_IDS, DUCKS, MusicPrefs.duck(this),
                 percent -> MusicPrefs.saveDuck(this, percent));
 

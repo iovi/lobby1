@@ -2,6 +2,7 @@ package iovi.lobby1.flow.phase;
 
 import iovi.lobby1.flow.GameUi;
 import iovi.lobby1.flow.Music;
+import iovi.lobby1.flow.Rules;
 import iovi.lobby1.flow.Scheduler;
 import iovi.lobby1.flow.Voice;
 import iovi.lobby1.game.Game;
@@ -22,6 +23,7 @@ abstract class Phase {
     final Screens screens;
     final Fouls fouls;
     final Summaries summaries;
+    final Rules rules;
 
     Phase(Host host) {
         this.host = host;
@@ -33,5 +35,6 @@ abstract class Phase {
         this.screens = host.screens;
         this.fouls = host.fouls;
         this.summaries = host.summaries;
+        this.rules = host.rules;
     }
 }

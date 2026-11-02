@@ -15,7 +15,7 @@ import iovi.lobby1.game.Game;
 /** День: речи по кругу, на каждой можно выставить кандидатуру. Результат — выставленные по порядку. */
 public final class DayPhase extends Phase {
     static final long SPEECH_MS = 60_000;
-    /** Дневная речь игрока с тремя фолами. */
+    /** Дневная речь игрока с тремя фолами по ФСМ. */
     static final long SHORT_SPEECH_MS = 30_000;
 
     /** Выставленные кандидатуры в порядке выставления. */
@@ -62,10 +62,14 @@ public final class DayPhase extends Phase {
 
     private void showSpeech(int i) {
         int n = order.get(i);
+        // У игрока с тремя фолами меняется только ближайшая дневная речь; оправдательные речи не меняются.
+        boolean penalty = fouls.takePenaltySpeech(n);
+        boolean silent = penalty && rules.silentAfterThreeFouls();
         List<Integer> allowed = new ArrayList<>(game.alive());
         allowed.removeAll(nominations);
         screens.newScreen();
-        GameUi.SpeechView view = ui.showSpeech(t("speech.title", n), t("speech.hint"), allowed, screens.controls());
+        GameUi.SpeechView view = ui.showSpeech(t(silent ? "speech.silentTitle" : "speech.title", n),
+                t(silent ? "speech.silentHint" : "speech.hint"), allowed, screens.controls());
         GameUi.Grid grid = view.grid();
         GameUi.Button confirm = view.confirm();
         int[] chosen = {0};
@@ -88,24 +92,37 @@ public final class DayPhase extends Phase {
         });
         view.setNominees(nomineesText());
 
-        voice.say(t("voice.speech", n));
+        String at = t("foul.at.speech", n);
         // Удалённый по фолам говорящий заканчивает речь сразу.
-        fouls.onPause(t("foul.at.speech", n), () -> {
+        Runnable afterRemoval = () -> {
             if (!game.isAlive(n)) {
                 speech(i + 1);
             }
-        });
-        // У игрока с тремя фолами короче только ближайшая дневная речь; оправдательные речи не меняются.
-        long duration = fouls.takeShortSpeech(n) ? SHORT_SPEECH_MS : SPEECH_MS;
-        screens.runTimer(view, duration, true, () -> {
-            Integer nominee = nominatedBy.get(n);
-            if (nominee != null) {
-                game.log().add(t("log.nomination", n, nominee));
-            }
+        };
+        if (silent) {
+            // По МСЛ слова нет: таймера тоже нет, игрок только выставляет и сам завершает.
+            voice.say(t("voice.silentSpeech", n));
+            game.log().add(t("log.silentSpeech", n));
+            screens.untimed(view, () -> endSpeech(i));
+            fouls.offer(view.showExtra(t("foul.button")), at, afterRemoval);
+            return;
+        }
+        voice.say(t("voice.speech", n));
+        fouls.onPause(at, afterRemoval);
+        screens.runTimer(view, penalty ? SHORT_SPEECH_MS : SPEECH_MS, true, () -> {
             voice.say(t("voice.speechEnd"));
-            speech(i + 1);
+            endSpeech(i);
         });
-        fouls.offerExtraTime(n, view, t("foul.at.speech", n), false);
+        fouls.offerExtraTime(n, view, at, false);
+    }
+
+    private void endSpeech(int i) {
+        int n = order.get(i);
+        Integer nominee = nominatedBy.get(n);
+        if (nominee != null) {
+            game.log().add(t("log.nomination", n, nominee));
+        }
+        speech(i + 1);
     }
 
     private String nomineesText() {

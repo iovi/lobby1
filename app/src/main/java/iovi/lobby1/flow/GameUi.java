@@ -49,6 +49,9 @@ public interface GameUi {
 
         void setControlsEnabled(boolean enabled);
 
+        /** Убирает отсчёт и «Паузу» — для речи без времени; «Завершить» остаётся. */
+        void hideTimer();
+
         /** Показывает дополнительную кнопку над кнопками таймера. */
         Button showExtra(String text);
 

@@ -8,13 +8,14 @@ import java.util.List;
 import java.util.Set;
 
 import iovi.lobby1.flow.GameUi;
+import iovi.lobby1.flow.Rules;
 import iovi.lobby1.flow.Voice;
 import iovi.lobby1.game.Game;
 
 /**
  * Фолы — сквозная механика дневных фаз: кнопка «Фол» открывает экран фолов поверх текущего экрана,
  * четвёртый фол удаляет игрока без прощальной минуты, и голосования в этот день уже нет.
- * Сюда же — доп. время за 2 фола и сокращённая речь у игрока с тремя фолами.
+ * Сюда же — доп. время за 2 фола и особая речь у игрока с тремя фолами.
  */
 public final class Fouls {
     /** Сколько добавляет «Доп. время» (за 2 фола). */
@@ -30,6 +31,7 @@ public final class Fouls {
     private final GameUi ui;
     private final Voice voice;
     private final Screens screens;
+    private final Rules rules;
     private final Listener listener;
     /** На каком экране открыт экран фолов; -1 — закрыт. */
     private int openOn = -1;
@@ -41,11 +43,12 @@ public final class Fouls {
     /** Игроки с тремя фолами, у которых уже была сокращённая дневная речь. */
     private final Set<Integer> shortSpeeches = new HashSet<>();
 
-    Fouls(Game game, GameUi ui, Voice voice, Screens screens, Listener listener) {
+    Fouls(Game game, GameUi ui, Voice voice, Screens screens, Rules rules, Listener listener) {
         this.game = game;
         this.ui = ui;
         this.voice = voice;
         this.screens = screens;
+        this.rules = rules;
         this.listener = listener;
     }
 
@@ -94,17 +97,20 @@ public final class Fouls {
         }
     }
 
-    /** У игрока с тремя фолами короче только ближайшая дневная речь; true — эта речь сокращённая. */
-    public boolean takeShortSpeech(int n) {
+    /**
+     * У игрока с тремя фолами меняется только ближайшая дневная речь (по ФСМ — короче, по МСЛ — без слова);
+     * true — эта речь такая.
+     */
+    public boolean takePenaltySpeech(int n) {
         return game.fouls(n) == Game.MAX_FOULS && shortSpeeches.add(n);
     }
 
     /**
      * «Доп. время» у игрока с 0 или 1 фолом: за 2 фола текущая речь удлиняется на {@link #EXTRA_TIME_MS}.
-     * Только на дневной (кроме нулевого круга) и прощальной речи; на оправдательной — нет.
+     * Только на дневной (кроме нулевого круга) и прощальной речи; на оправдательной — нет. По МСЛ доп. времени нет.
      */
     public void offerExtraTime(int n, GameUi.TimerView view, String at, boolean farewell) {
-        if ((game.dayNumber() == 1 && !farewell) || game.fouls(n) > 1) {
+        if (!rules.extraTime() || (game.dayNumber() == 1 && !farewell) || game.fouls(n) > 1) {
             return;
         }
         GameUi.Button bonus = view.showBonus(t("extraTime.button"));

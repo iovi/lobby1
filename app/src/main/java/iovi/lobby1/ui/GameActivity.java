@@ -77,7 +77,7 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
         });
 
         flow = new GameFlow(new Game(new SecureRandom()), this, announcer, music, new HandlerScheduler(),
-                GamePrefs.nightTurnSeconds(this) * 1000L);
+                GamePrefs.nightTurnSeconds(this) * 1000L, GamePrefs.rules(this));
         flow.start();
     }
 
@@ -418,6 +418,12 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
         public void setControlsEnabled(boolean enabled) {
             pause.setEnabled(enabled);
             finish.setEnabled(enabled);
+        }
+
+        @Override
+        public void hideTimer() {
+            time.setVisibility(View.GONE);
+            pause.setVisibility(View.GONE);
         }
 
         @Override

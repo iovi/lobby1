@@ -36,12 +36,13 @@ public final class GameFlow {
     private boolean inDay;
 
     /** nightTurnMs — отсчёт ночного хода, одинаковый для всех ролей. */
-    public GameFlow(Game game, GameUi ui, Voice voice, Music music, Scheduler scheduler, long nightTurnMs) {
+    public GameFlow(Game game, GameUi ui, Voice voice, Music music, Scheduler scheduler, long nightTurnMs,
+                    Rules rules) {
         this.game = game;
         this.ui = ui;
         this.voice = voice;
         this.music = music;
-        this.host = new Host(game, ui, voice, music, scheduler, nightTurnMs, this::onFoulRemoval);
+        this.host = new Host(game, ui, voice, music, scheduler, nightTurnMs, rules, this::onFoulRemoval);
     }
 
     public void start() {
@@ -70,7 +71,8 @@ public final class GameFlow {
 
     /**
      * Единственный заголосованный в нулевом круге делает лучший ход и оставляет протокол; остальные —
-     * только прощальная минута. Удалённый по фолам на экране итогов уже покинул стол — его не провожают.
+     * только прощальная минута. По МСЛ лучшего хода у него нет. Удалённый по фолам на экране итогов уже
+     * покинул стол — его не провожают.
      */
     private void votedOut(List<Integer> players) {
         if (players.isEmpty()) {
@@ -84,7 +86,7 @@ public final class GameFlow {
                 leaving.add(x);
             }
         }
-        farewell(leaving, lastWords, lastWords, this::night);
+        farewell(leaving, lastWords && host.rules.bestMoveForFirstVotedOut(), lastWords, this::night);
     }
 
     /** Ночь → утро. Убитый ночью оставляет протокол, убитый в первую ночь ещё и делает лучший ход. */
@@ -100,9 +102,10 @@ public final class GameFlow {
         }));
     }
 
-    /** Проводы выбывших, затем проверка победы; next — если игра продолжается. */
+    /** Проводы выбывших, затем проверка победы; next — если игра продолжается. По МСЛ протоколов нет. */
     private void farewell(List<Integer> players, boolean withBestMove, boolean withProtocol, Runnable next) {
-        new FarewellPhase(host).run(players, withBestMove, withProtocol, outcome -> {
+        boolean protocol = withProtocol && host.rules.protocols();
+        new FarewellPhase(host).run(players, withBestMove, protocol, outcome -> {
             if (outcome == FarewellPhase.Outcome.MANUAL) {
                 startManual();
                 return;

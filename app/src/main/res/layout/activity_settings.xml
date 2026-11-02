@@ -43,6 +43,44 @@
     <TextView
         style="@style/Title"
         android:layout_marginTop="40dp"
+        android:text="@string/settings_rules_title" />
+
+    <!-- Под каждым вариантом — его особенности, с отступом под текст варианта. -->
+    <RadioGroup
+        android:id="@+id/rules"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp">
+
+        <RadioButton
+            android:id="@+id/rulesFsm"
+            style="@style/Option"
+            android:text="@string/settings_rules_fsm" />
+
+        <TextView
+            style="@style/Body"
+            android:layout_marginStart="32dp"
+            android:gravity="start"
+            android:text="@string/settings_rules_fsm_hint"
+            android:textSize="15sp" />
+
+        <RadioButton
+            android:id="@+id/rulesMsl"
+            style="@style/Option"
+            android:layout_marginTop="8dp"
+            android:text="@string/settings_rules_msl" />
+
+        <TextView
+            style="@style/Body"
+            android:layout_marginStart="32dp"
+            android:gravity="start"
+            android:text="@string/settings_rules_msl_hint"
+            android:textSize="15sp" />
+    </RadioGroup>
+
+    <TextView
+        style="@style/Title"
+        android:layout_marginTop="40dp"
         android:text="@string/settings_duck_title" />
 
     <TextView

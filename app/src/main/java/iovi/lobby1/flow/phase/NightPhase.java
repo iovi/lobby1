@@ -106,8 +106,9 @@ public final class NightPhase extends Phase {
                 pickShot(n, this::awaitTurnEnd);
                 break;
             case DON:
-                // В первую ночь дон не может проверить того, в кого стрелял.
-                pickShot(n, () -> check(n, game.dayNumber() == 1 ? shots.getOrDefault(n, 0) : 0,
+                // По ФСМ в первую ночь дон не может проверить того, в кого стрелял.
+                pickShot(n, () -> check(n, game.dayNumber() == 1 && !rules.donChecksOwnShotFirstNight()
+                                ? shots.getOrDefault(n, 0) : 0,
                         t("don.title"), t("don.hint"),
                         target -> game.player(target).role() == Role.SHERIFF
                                 ? t("don.sheriff")

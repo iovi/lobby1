@@ -172,6 +172,71 @@ public class GameFlowTest {
         // После голосования сразу передача телефона для лучшего хода, без кнопки «Лучший ход».
         assertFalse(table.ui.messageButtons.contains("Лучший ход"));
         assertEquals("Победили мирные жители", table.ui.gameOverTitle);
+        // По ФСМ в первую ночь дон (1, стрелял в 2) не может проверить свой отстрел.
+        assertFalse(table.ui.donChecks.get(0).contains(2));
+    }
+
+    /**
+     * Та же партия по МСЛ: у 5 только прощальная минута — без лучшего хода, протокола и доп. времени;
+     * дон в первую ночь может проверить свой отстрел. У 7 перед речью 2 три фола — его речь в первый
+     * день без слова и без таймера, во второй — снова минута.
+     */
+    @Test
+    public void mslRules() {
+        Map<Integer, Map<Integer, Integer>> nominations = new HashMap<>();
+        nominations.put(1, map(1, 5, 2, 7));
+        nominations.put(2, map(8, 1));
+        nominations.put(3, map(8, 2));
+        nominations.put(4, map(8, 3));
+        Table table = new Table(nominations, Arrays.asList(6), 0, Rules.MSL);
+        table.extraTime.add("1:5");
+        table.fouls.put("handoff:1:2", Arrays.asList(7, 7, 7));
+        table.play();
+
+        String log = table.game.log().toString();
+        assertTrue(log, log.contains("Голосование: 5 — 6, 7 — 4"));
+        assertFalse(log, log.contains("Лучший ход"));
+        assertFalse(log, log.contains("Протокол игрока 5"));
+        assertFalse(log, log.contains("доп. время"));
+        assertTrue(log, log.contains("Игрок 7 — три фола, речь без слова"));
+        assertEquals("Победили мирные жители", table.ui.gameOverTitle);
+
+        List<String> said = table.voice.said;
+        assertFalse(said.contains("Игрок 5, ваш протокол."));
+        assertFalse(said.contains("Игрок 5, ваш лучший ход."));
+        assertTrue(said.contains("Игрок 5, ваша прощальная минута."));
+        assertTrue(said.contains(Texts.get("voice.silentSpeech", 7)));
+        // Кнопки «Доп. время» нет нигде.
+        assertTrue(table.extraTime.contains("1:5"));
+        for (Screen s : table.ui.speeches) {
+            assertEquals(s.title, null, s.bonus);
+        }
+        for (Screen s : table.ui.timers) {
+            assertEquals(s.title, null, s.bonus);
+        }
+        // Речь без слова — без таймера; следующая речь 7 — обычная минута.
+        Screen silent = table.ui.speeches.stream()
+                .filter(s -> s.title.equals(Texts.get("speech.silentTitle", 7))).findFirst().get();
+        assertTrue(silent.untimed);
+        assertEquals(-1, silent.startTime);
+        assertEquals(60_000, speechTime(table, "Речь игрока 7", 0));
+        // Дон (1) стрелял в 2 и в первую ночь может его проверить.
+        assertTrue(table.ui.donChecks.get(0).contains(2));
+    }
+
+    /** МСЛ: убитый в первую ночь 6 делает лучший ход, протокола нет; затем мануальный режим. */
+    @Test
+    public void mslFirstNightKillKeepsBestMove() {
+        Table table = new Table(blacksLeaveOneByOne(), Arrays.asList(), 6, Rules.MSL);
+        table.stopOnLeft = true;
+        table.ui.confirmAnswers.add(true);
+        table.play();
+
+        String log = table.game.log().toString();
+        assertTrue(log, log.contains("Убит игрок 6"));
+        assertTrue(log, log.contains("Лучший ход игрока 6: 1, 2, 3"));
+        assertFalse(log, log.contains("протокол"));
+        assertTrue(table.flow.isManual());
     }
 
     /**
@@ -487,7 +552,7 @@ public class GameFlowTest {
         final FakeVoice voice = new FakeVoice();
         final FakeMusic music = new FakeMusic();
         final FakeUi ui = new FakeUi();
-        final GameFlow flow = new GameFlow(game, ui, voice, music, scheduler, 8_000);
+        final GameFlow flow;
         /** День → (говорящий → кого выставляет). */
         final Map<Integer, Map<Integer, Integer>> nominations;
         final Deque<Integer> votes;
@@ -523,6 +588,11 @@ public class GameFlowTest {
         }
 
         Table(Map<Integer, Map<Integer, Integer>> nominations, List<Integer> votes, int shotTarget) {
+            this(nominations, votes, shotTarget, Rules.FSM);
+        }
+
+        Table(Map<Integer, Map<Integer, Integer>> nominations, List<Integer> votes, int shotTarget, Rules rules) {
+            this.flow = new GameFlow(game, ui, voice, music, scheduler, 8_000, rules);
             this.nominations = nominations;
             this.votes = new ArrayDeque<>(votes);
             this.shotTarget = shotTarget;
@@ -577,7 +647,10 @@ public class GameFlowTest {
                         return true;
                     }
                     if (startFouls("speech:" + game.dayNumber() + ":" + ui.handoffPlayer)) {
-                        s.controls.onPauseToggle();
+                        // В речи без слова «Фол» виден сразу, паузы нет.
+                        if (!s.untimed) {
+                            s.controls.onPauseToggle();
+                        }
                         return s.extra.click();
                     }
                     if (s.bonus != null && extraTime.remove(game.dayNumber() + ":" + ui.handoffPlayer)) {
@@ -588,6 +661,11 @@ public class GameFlowTest {
                         s.done = true;
                         s.grid.click(nominee);
                         return s.confirm.click();
+                    }
+                    if (s.untimed) {
+                        // Речь без слова сама не кончается — её завершает игрок.
+                        s.controls.onFinish();
+                        return true;
                     }
                     return false;
                 }
@@ -872,6 +950,8 @@ public class GameFlowTest {
         /** Наибольшее показанное время — растёт после «Доп. время». */
         long maxTime;
         FakeButton bonus;
+        /** Речь без отсчёта (МСЛ, три фола). */
+        boolean untimed;
         /** Кнопки меню мануального режима. */
         final List<FakeButton> buttons = new ArrayList<>();
 
@@ -973,6 +1053,11 @@ public class GameFlowTest {
         }
 
         @Override
+        public void hideTimer() {
+            untimed = true;
+        }
+
+        @Override
         public GameUi.Grid grid() {
             return grid;
         }
@@ -1045,6 +1130,8 @@ public class GameFlowTest {
         final List<Screen> timers = new ArrayList<>();
         /** Экраны дневных речей по порядку. */
         final List<Screen> speeches = new ArrayList<>();
+        /** Кого дон мог проверить — по ночам. */
+        final List<List<Integer>> donChecks = new ArrayList<>();
 
         @Override
         public void setPhase(String label) {
@@ -1108,6 +1195,9 @@ public class GameFlowTest {
             current.action = new FakeButton();
             if (enabled != null) {
                 current.grid = new FakeGrid(enabled);
+            }
+            if (title.equals(Texts.get("don.title"))) {
+                donChecks.add(new ArrayList<>(enabled));
             }
             return current;
         }

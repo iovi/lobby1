@@ -114,6 +114,13 @@ public final class Screens {
         return view;
     }
 
+    /** Речь без отсчёта: таймер и «Пауза» скрыты, закончить её можно только кнопкой «Завершить». */
+    void untimed(GameUi.TimerView view, Runnable onDone) {
+        view.hideTimer();
+        timerView = view;
+        timerDone = onceRun(onDone);
+    }
+
     /** В речах и договорке за {@link PhaseTimer#WARNING_MS} до конца звучит «10 секунд», в остальных фазах — короткий сигнал. */
     public void runTimer(GameUi.TimerView view, long durationMs, boolean speech, Runnable onDone) {
         timerView = view;

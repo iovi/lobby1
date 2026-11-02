@@ -8,6 +8,12 @@
     <string name="music_none">Ночная музыка не выбрана</string>
     <string name="music_selected">Ночная музыка: %1$s</string>
 
+    <string name="settings_rules_title">Версия правил</string>
+    <string name="settings_rules_fsm">ФСМ</string>
+    <string name="settings_rules_msl">МСЛ</string>
+    <string name="settings_rules_fsm_hint">Протокол, доп. время, речь 30 с при 3 фолах, дон не проверяет первый отстрел</string>
+    <string name="settings_rules_msl_hint">Без протокола и доп. времени, при 3 фолах только выставление</string>
+
     <string name="settings_music_title">Музыка для ночи</string>
     <string name="settings_music_hint">Играет во время раздачи карт, договорки, свободной посадки и игровых ночей.</string>
     <string name="settings_pick">Выбрать файл</string>
