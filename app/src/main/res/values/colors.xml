@@ -9,6 +9,8 @@
     <color name="card_red">#FFB71C1C</color>
     <color name="card_black">#FF000000</color>
     <color name="card_border">#FF5A5A66</color>
+    <color name="card_back">#FF6E0006</color>
+    <color name="card_back_pattern">#40FFFFFF</color>
     <color name="number_idle">#FF2C2C36</color>
     <color name="number_selected">#FFD32F2F</color>
     <color name="black">#FF000000</color>

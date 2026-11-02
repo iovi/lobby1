@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.RadioGroup;
 import android.widget.TextView;
 
@@ -18,7 +19,7 @@ import iovi.lobby1.R;
 import iovi.lobby1.audio.MusicPrefs;
 import iovi.lobby1.flow.Rules;
 
-/** Настройки: версия правил, музыка для ночных фаз и её приглушение под объявления, время ночного хода. */
+/** Настройки: музыка для ночных фаз и её приглушение под объявления, версия правил, раздача, время ночного хода. */
 public class SettingsActivity extends AppCompatActivity {
     /** Кнопки вариантов → значения; порядок — как в разметке. */
     private static final int[] RULES_IDS = {R.id.rulesFsm, R.id.rulesMsl};
@@ -46,6 +47,9 @@ public class SettingsActivity extends AppCompatActivity {
         bindOptions(findViewById(R.id.rules), RULES_IDS, RULES_INDEXES,
                 Arrays.asList(RULES).indexOf(GamePrefs.rules(this)),
                 index -> GamePrefs.saveRules(this, RULES[index]));
+        CheckBox autoDeal = findViewById(R.id.autoDeal);
+        autoDeal.setChecked(GamePrefs.autoDeal(this));
+        autoDeal.setOnCheckedChangeListener((box, checked) -> GamePrefs.saveAutoDeal(this, checked));
         bindOptions(findViewById(R.id.duck), DUCK_IDS, DUCKS, MusicPrefs.duck(this),
                 percent -> MusicPrefs.saveDuck(this, percent));
 

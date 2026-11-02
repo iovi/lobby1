@@ -35,14 +35,18 @@ public final class GameFlow {
     /** Идёт день — в строке фазы число игроков за столом. */
     private boolean inDay;
 
-    /** nightTurnMs — отсчёт ночного хода, одинаковый для всех ролей. */
+    /**
+     * nightTurnMs — отсчёт ночного хода, одинаковый для всех ролей; autoDeal — карта показывается по кнопке,
+     * иначе игрок сам выбирает её из колоды.
+     */
     public GameFlow(Game game, GameUi ui, Voice voice, Music music, Scheduler scheduler, long nightTurnMs,
-                    Rules rules) {
+                    Rules rules, boolean autoDeal) {
         this.game = game;
         this.ui = ui;
         this.voice = voice;
         this.music = music;
-        this.host = new Host(game, ui, voice, music, scheduler, nightTurnMs, rules, this::onFoulRemoval);
+        this.host = new Host(game, ui, voice, music, scheduler, nightTurnMs, rules, autoDeal,
+                this::onFoulRemoval);
     }
 
     public void start() {

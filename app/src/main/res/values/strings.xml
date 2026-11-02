@@ -14,6 +14,10 @@
     <string name="settings_rules_fsm_hint">Протокол, доп. время, речь 30 с при 3 фолах, дон не проверяет первый отстрел</string>
     <string name="settings_rules_msl_hint">Без протокола и доп. времени, при 3 фолах только выставление</string>
 
+    <string name="settings_deal_title">Раздача карт</string>
+    <string name="settings_auto_deal">Автораздача</string>
+    <string name="deck_card">Карта %1$d</string>
+
     <string name="settings_music_title">Музыка для ночи</string>
     <string name="settings_music_hint">Играет во время раздачи карт, договорки, свободной посадки и игровых ночей.</string>
     <string name="settings_pick">Выбрать файл</string>

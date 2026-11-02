@@ -18,12 +18,15 @@ public final class Host {
     final long nightTurnMs;
     /** Версия правил — из настроек. */
     public final Rules rules;
+    /** Автораздача — из настроек; без неё игрок сам выбирает карту из колоды. */
+    final boolean autoDeal;
     public final Screens screens;
     public final Fouls fouls;
     public final Summaries summaries = new Summaries();
 
     public Host(Game game, GameUi ui, Voice voice, Music music, Scheduler scheduler, long nightTurnMs,
-                Rules rules, Fouls.Listener onFoulRemoval) {
+                Rules rules, boolean autoDeal, Fouls.Listener onFoulRemoval) {
+        this.autoDeal = autoDeal;
         this.game = game;
         this.ui = ui;
         this.voice = voice;

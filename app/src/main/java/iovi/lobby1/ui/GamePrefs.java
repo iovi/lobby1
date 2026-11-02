@@ -10,6 +10,7 @@ public final class GamePrefs {
     private static final String FILE = "settings";
     private static final String KEY_NIGHT_TURN = "night_turn_seconds";
     private static final String KEY_RULES = "rules";
+    private static final String KEY_AUTO_DEAL = "auto_deal";
     public static final int DEFAULT_NIGHT_TURN = 8;
     public static final int MIN_NIGHT_TURN = 5;
     public static final int MAX_NIGHT_TURN = 30;
@@ -29,6 +30,15 @@ public final class GamePrefs {
 
     public static void saveNightTurnSeconds(Context context, int seconds) {
         prefs(context).edit().putInt(KEY_NIGHT_TURN, seconds).apply();
+    }
+
+    /** Автораздача: карта показывается по кнопке. Выключена — игрок сам выбирает карту из колоды. */
+    public static boolean autoDeal(Context context) {
+        return prefs(context).getBoolean(KEY_AUTO_DEAL, true);
+    }
+
+    public static void saveAutoDeal(Context context, boolean autoDeal) {
+        prefs(context).edit().putBoolean(KEY_AUTO_DEAL, autoDeal).apply();
     }
 
     /** Версия правил; по умолчанию — ФСМ. */

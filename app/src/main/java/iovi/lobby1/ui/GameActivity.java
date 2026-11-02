@@ -4,6 +4,7 @@ import android.animation.ObjectAnimator;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -24,6 +25,7 @@ import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
+import androidx.core.view.OneShotPreDrawListener;
 
 import com.google.android.material.button.MaterialButton;
 
@@ -53,7 +55,20 @@ import iovi.lobby1.game.Role;
  * экраны, которые он показывает, и передаёт ему нажатия.
  */
 public class GameActivity extends AppCompatActivity implements GameUi, Announcer.Listener {
+    /** Колода при раздаче — два столбца. */
+    private static final int DECK_COLUMNS = 2;
+    /** Половина переворота карты: рубашка уходит ребром, затем лицо выходит из ребра. */
+    private static final long FLIP_HALF_MS = 200;
+    /** Сколько открытая карта из колоды видна маленькой, прежде чем вырасти. */
+    private static final long SMALL_CARD_MS = 300;
+    /** Рост карты из колоды до полного экрана. */
+    private static final long GROW_MS = 350;
+    /** Расстояние камеры для поворота карт (в dp) — без него перспектива искажает большую карту. */
+    private static final float CAMERA_DISTANCE = 8000;
+
     private GameFlow flow;
+    /** Где на экране была карта, выбранная в колоде (в координатах окна); null — карта не из колоды. */
+    private RectF pickedCard;
     private Announcer announcer;
     private NightMusic music;
     private FrameLayout screen;
@@ -77,7 +92,7 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
         });
 
         flow = new GameFlow(new Game(new SecureRandom()), this, announcer, music, new HandlerScheduler(),
-                GamePrefs.nightTurnSeconds(this) * 1000L, GamePrefs.rules(this));
+                GamePrefs.nightTurnSeconds(this) * 1000L, GamePrefs.rules(this), GamePrefs.autoDeal(this));
         flow.start();
     }
 
@@ -164,8 +179,19 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
     }
 
     @Override
-    public void showCard(String player, String roleTitle, Role role, long durationMs) {
-        View v = show(R.layout.screen_card);
+    public void showCard(String player, String roleTitle, Role role, long durationMs, boolean flipIn) {
+        RectF from = flipIn ? pickedCard : null;
+        pickedCard = null;
+        View v;
+        View deck = null;
+        if (from != null) {
+            // Колода остаётся под картой, пока та не вырастет на весь экран.
+            deck = screen.getChildAt(0);
+            v = LayoutInflater.from(this).inflate(R.layout.screen_card, screen, false);
+            screen.addView(v);
+        } else {
+            v = show(R.layout.screen_card);
+        }
 
         GradientDrawable card = new GradientDrawable();
         card.setCornerRadius(dp(20));
@@ -184,9 +210,101 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
         }
 
         ProgressBar progress = v.findViewById(R.id.progress);
-        ObjectAnimator.ofInt(progress, "progress", progress.getMax(), 0)
-                .setDuration(durationMs)
-                .start();
+        ObjectAnimator countdown = ObjectAnimator.ofInt(progress, "progress", progress.getMax(), 0);
+        if (from == null) {
+            countdown.setDuration(durationMs).start();
+            return;
+        }
+        // Полоска пойдёт, когда карта откроется на весь экран.
+        long reveal = FLIP_HALF_MS + SMALL_CARD_MS + GROW_MS;
+        progress.setAlpha(0);
+        countdown.setStartDelay(reveal);
+        countdown.setDuration(Math.max(0, durationMs - reveal)).start();
+        revealFromDeck(v.findViewById(R.id.card), from, deck, progress);
+    }
+
+    /**
+     * Карта из колоды: лицо выходит из ребра на месте выбранной рубашки, маленькая карта видна мгновение,
+     * затем вырастает на весь экран; после этого колода под ней убирается.
+     */
+    private void revealFromDeck(View card, RectF from, View deck, View progress) {
+        card.setCameraDistance(CAMERA_DISTANCE * getResources().getDisplayMetrics().density);
+        card.setVisibility(View.INVISIBLE);
+        OneShotPreDrawListener.add(card, () -> {
+            int[] at = new int[2];
+            card.getLocationInWindow(at);
+            card.setPivotX(card.getWidth() / 2f);
+            card.setPivotY(card.getHeight() / 2f);
+            card.setTranslationX(from.centerX() - (at[0] + card.getWidth() / 2f));
+            card.setTranslationY(from.centerY() - (at[1] + card.getHeight() / 2f));
+            card.setScaleX(from.width() / card.getWidth());
+            card.setScaleY(from.height() / card.getHeight());
+            card.setRotationY(-90);
+            card.setVisibility(View.VISIBLE);
+            card.animate().rotationY(0).setDuration(FLIP_HALF_MS).withEndAction(() ->
+                    card.animate().scaleX(1).scaleY(1).translationX(0).translationY(0)
+                            .setStartDelay(SMALL_CARD_MS).setDuration(GROW_MS)
+                            .withEndAction(() -> {
+                                screen.removeView(deck);
+                                progress.animate().alpha(1).setDuration(FLIP_HALF_MS).start();
+                            })
+                            .start()).start();
+        });
+    }
+
+    @Override
+    public void showDeck(String title, String hint, boolean[] taken, IntConsumer onPick) {
+        View v = show(R.layout.screen_deck);
+        this.<TextView>find(v, R.id.title).setText(title);
+        this.<TextView>find(v, R.id.hint).setText(hint);
+        LinearLayout deck = v.findViewById(R.id.deck);
+        boolean[] picked = {false};
+        for (int row = 0; row < taken.length / DECK_COLUMNS; row++) {
+            LinearLayout line = new LinearLayout(this);
+            line.setOrientation(LinearLayout.HORIZONTAL);
+            LinearLayout.LayoutParams lineParams = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, 0, 1);
+            if (row > 0) {
+                lineParams.topMargin = dp(6);
+            }
+            deck.addView(line, lineParams);
+            for (int col = 0; col < DECK_COLUMNS; col++) {
+                int slot = row * DECK_COLUMNS + col;
+                // Столбцы прижаты друг к другу — колода посередине экрана.
+                CardBackView card = new CardBackView(this, col == 0 ? -1 : 1);
+                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,
+                        LinearLayout.LayoutParams.MATCH_PARENT, 1);
+                if (col == 0) {
+                    params.rightMargin = dp(12);
+                } else {
+                    params.leftMargin = dp(12);
+                }
+                line.addView(card, params);
+                if (taken[slot]) {
+                    // Карту отсюда уже взяли — место остаётся пустым.
+                    card.setVisibility(View.INVISIBLE);
+                    continue;
+                }
+                card.setContentDescription(getString(R.string.deck_card, slot + 1));
+                card.setCameraDistance(CAMERA_DISTANCE * getResources().getDisplayMetrics().density);
+                card.setOnClickListener(c -> {
+                    if (picked[0]) {
+                        return;
+                    }
+                    picked[0] = true;
+                    // Место карты на экране — отсюда она потом вырастет.
+                    int[] at = new int[2];
+                    card.getLocationInWindow(at);
+                    RectF rect = new RectF(card.cardRect());
+                    rect.offset(at[0], at[1]);
+                    // Первая половина переворота — рубашка уходит ребром.
+                    card.animate().rotationY(90).setDuration(FLIP_HALF_MS).withEndAction(() -> {
+                        pickedCard = rect;
+                        onPick.accept(slot);
+                    }).start();
+                });
+            }
+        }
     }
 
     @Override

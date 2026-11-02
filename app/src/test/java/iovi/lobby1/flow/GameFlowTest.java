@@ -224,6 +224,24 @@ public class GameFlowTest {
         assertTrue(table.ui.donChecks.get(0).contains(2));
     }
 
+    /**
+     * Без автораздачи каждый выбирает карту из колоды: колода из 10 мест, с каждым игроком на одно пустое
+     * место больше; на взятой карте — роль игрока. Дальше партия идёт как обычно.
+     */
+    @Test
+    public void dealingFromDeck() {
+        Table table = new Table(blacksLeaveOneByOne(), Arrays.asList(), 0, Rules.FSM, false);
+        table.play();
+
+        assertEquals(Arrays.asList(0, 1, 2, 3, 4, 5, 6, 7, 8, 9), table.ui.deckEmpty);
+        assertEquals(Game.PLAYER_COUNT, table.ui.cards.size());
+        for (int n = 1; n <= Game.PLAYER_COUNT; n++) {
+            assertEquals("Игрок " + n + ": " + ROLES.get(n - 1).title() + " (из колоды)", table.ui.cards.get(n - 1));
+        }
+        assertTrue(table.voice.said.contains("Игрок номер 10"));
+        assertEquals("Победили мирные жители", table.ui.gameOverTitle);
+    }
+
     /** МСЛ: убитый в первую ночь 6 делает лучший ход, протокола нет; затем мануальный режим. */
     @Test
     public void mslFirstNightKillKeepsBestMove() {
@@ -592,7 +610,12 @@ public class GameFlowTest {
         }
 
         Table(Map<Integer, Map<Integer, Integer>> nominations, List<Integer> votes, int shotTarget, Rules rules) {
-            this.flow = new GameFlow(game, ui, voice, music, scheduler, 8_000, rules);
+            this(nominations, votes, shotTarget, rules, true);
+        }
+
+        Table(Map<Integer, Map<Integer, Integer>> nominations, List<Integer> votes, int shotTarget, Rules rules,
+              boolean autoDeal) {
+            this.flow = new GameFlow(game, ui, voice, music, scheduler, 8_000, rules, autoDeal);
             this.nominations = nominations;
             this.votes = new ArrayDeque<>(votes);
             this.shotTarget = shotTarget;
@@ -619,6 +642,21 @@ public class GameFlowTest {
                         return s.extra.click();
                     }
                     return s.action.click();
+                }
+                case "deck": {
+                    // Каждый берёт последнюю оставшуюся карту — так видно, что взятые места пустеют.
+                    int empty = 0;
+                    int slot = -1;
+                    for (int k = 0; k < s.taken.length; k++) {
+                        if (s.taken[k]) {
+                            empty++;
+                        } else {
+                            slot = k;
+                        }
+                    }
+                    ui.deckEmpty.add(empty);
+                    s.onPick.accept(slot);
+                    return true;
                 }
                 case "fouls": {
                     for (int n : activeFouls) {
@@ -952,6 +990,9 @@ public class GameFlowTest {
         FakeButton bonus;
         /** Речь без отсчёта (МСЛ, три фола). */
         boolean untimed;
+        /** Колода: какие места пусты и выбор карты. */
+        boolean[] taken;
+        IntConsumer onPick;
         /** Кнопки меню мануального режима. */
         final List<FakeButton> buttons = new ArrayList<>();
 
@@ -1132,6 +1173,10 @@ public class GameFlowTest {
         final List<Screen> speeches = new ArrayList<>();
         /** Кого дон мог проверить — по ночам. */
         final List<List<Integer>> donChecks = new ArrayList<>();
+        /** Показанные карты: «Игрок N: роль», у взятых из колоды — с пометкой. */
+        final List<String> cards = new ArrayList<>();
+        /** Сколько пустых мест было в колоде при каждом выборе. */
+        final List<Integer> deckEmpty = new ArrayList<>();
 
         @Override
         public void setPhase(String label) {
@@ -1159,8 +1204,16 @@ public class GameFlowTest {
         }
 
         @Override
-        public void showCard(String player, String roleTitle, Role role, long durationMs) {
+        public void showCard(String player, String roleTitle, Role role, long durationMs, boolean flipIn) {
             current = new Screen("card", roleTitle);
+            cards.add(player + ": " + roleTitle + (flipIn ? " (из колоды)" : ""));
+        }
+
+        @Override
+        public void showDeck(String title, String hint, boolean[] taken, IntConsumer onPick) {
+            current = new Screen("deck", title);
+            current.taken = taken.clone();
+            current.onPick = onPick;
         }
 
         @Override

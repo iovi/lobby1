@@ -162,8 +162,17 @@ public interface GameUi {
 
     MessageView showHandoff(String title, int player, String hint, String button, Runnable next);
 
-    /** Карта роли; полоска показа убывает за durationMs. */
-    void showCard(String player, String roleTitle, Role role, long durationMs);
+    /**
+     * Карта роли; полоска показа убывает за durationMs. flipIn — карта выбрана из колоды: она открывается
+     * переворотом на месте рубашки и вырастает на весь экран (это время входит в durationMs).
+     */
+    void showCard(String player, String roleTitle, Role role, long durationMs, boolean flipIn);
+
+    /**
+     * Колода рубашками вверх, {@link iovi.lobby1.game.Game#PLAYER_COUNT} мест. taken[i] — карту с места i уже
+     * взяли, там пусто. Нажатая карта переворачивается, затем onPick(место); нажать можно только одну.
+     */
+    void showDeck(String title, String hint, boolean[] taken, IntConsumer onPick);
 
     TimerView showTimer(String title, String subtitle, TimerControls controls);
 
