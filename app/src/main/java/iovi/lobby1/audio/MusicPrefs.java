@@ -6,16 +6,13 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.provider.OpenableColumns;
 
-/** Выбранный в настройках музыкальный файл для ночных фаз и его громкость. */
+/** Выбранный в настройках музыкальный файл для ночных фаз и его приглушение под объявления. */
 public final class MusicPrefs {
     private static final String FILE = "settings";
     private static final String KEY_URI = "night_music_uri";
     private static final String KEY_NAME = "night_music_name";
-    private static final String KEY_LEVEL = "night_music_level";
     private static final String KEY_DUCK = "night_music_duck";
-    /** Громкость музыки относительно голоса, в процентах; общую задаёт системная громкость медиа. */
-    public static final int DEFAULT_LEVEL = 100;
-    /** Громкость музыки во время объявлений, в процентах от {@link #level}. */
+    /** Громкость музыки во время объявлений, в процентах от обычной (она равна громкости голоса). */
     public static final int DEFAULT_DUCK = 20;
 
     private MusicPrefs() {
@@ -41,18 +38,6 @@ public final class MusicPrefs {
                 .putString(KEY_URI, uri.toString())
                 .putString(KEY_NAME, displayName(context, uri))
                 .apply();
-    }
-
-    public static void clear(Context context) {
-        prefs(context).edit().remove(KEY_URI).remove(KEY_NAME).apply();
-    }
-
-    public static int level(Context context) {
-        return prefs(context).getInt(KEY_LEVEL, DEFAULT_LEVEL);
-    }
-
-    public static void saveLevel(Context context, int percent) {
-        prefs(context).edit().putInt(KEY_LEVEL, percent).apply();
     }
 
     public static int duck(Context context) {

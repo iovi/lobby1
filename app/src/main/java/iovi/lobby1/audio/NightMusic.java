@@ -69,10 +69,6 @@ public final class NightMusic implements Music {
         }
     }
 
-    public boolean isPlaying() {
-        return player != null;
-    }
-
     @Override
     public void stop() {
         if (player != null) {
@@ -104,16 +100,10 @@ public final class NightMusic implements Music {
         applyVolume();
     }
 
-    /**
-     * Громкость из настроек: доля от системной громкости медиа, на которой звучит и голос, —
-     * музыку можно сделать только тише голоса, не громче.
-     */
-    public void applyVolume() {
+    /** Музыка звучит как голос (на системной громкости медиа), под объявлениями — тише по настройке. */
+    private void applyVolume() {
         if (player != null && prepared) {
-            float v = MusicPrefs.level(context) / 100f;
-            if (ducked) {
-                v *= MusicPrefs.duck(context) / 100f;
-            }
+            float v = ducked ? MusicPrefs.duck(context) / 100f : 1f;
             player.setVolume(v, v);
         }
     }
