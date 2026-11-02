@@ -13,6 +13,8 @@ import android.view.View;
 
 import androidx.core.content.ContextCompat;
 
+import java.util.Objects;
+
 import iovi.lobby1.R;
 
 /**
@@ -33,11 +35,11 @@ final class CardBackView extends View {
     private final RectF rect = new RectF();
     private final float radius;
     /** Куда прижата карта в ячейке по горизонтали: -1 — вправо (к соседу справа), 1 — влево, 0 — по центру. */
-    private final int align;
+    private int align;
 
-    CardBackView(Context context, int align) {
+    /** Конструктор, которым пользуются инструменты разметки; прижатие — {@link #setAlign}. */
+    public CardBackView(Context context) {
         super(context);
-        this.align = align;
         float density = context.getResources().getDisplayMetrics().density;
         radius = 8 * density;
         fill.setColor(ContextCompat.getColor(context, R.color.card_back));
@@ -47,12 +49,19 @@ final class CardBackView extends View {
         border.setColor(ContextCompat.getColor(context, R.color.card_border));
     }
 
+    /** Куда прижать карту в ячейке: -1 — вправо, 1 — влево, 0 — по центру. Задаётся до раскладки. */
+    void setAlign(int align) {
+        this.align = align;
+        requestLayout();
+    }
+
     /** Одна клетка узора — эмблема приложения в цвете узора; общая для всех рубашек. */
     private static Bitmap tile(Context context) {
         if (tile == null) {
             int size = Math.round(TILE_DP * context.getResources().getDisplayMetrics().density);
             Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
-            Drawable icon = ContextCompat.getDrawable(context, R.drawable.ic_launcher_monochrome).mutate();
+            Drawable icon = Objects.requireNonNull(
+                    ContextCompat.getDrawable(context, R.drawable.ic_launcher_monochrome)).mutate();
             icon.setTint(ContextCompat.getColor(context, R.color.card_back_pattern));
             icon.setBounds(0, 0, size, size);
             icon.draw(new Canvas(bitmap));
@@ -86,6 +95,12 @@ final class CardBackView extends View {
             return false;
         }
         return super.onTouchEvent(event);
+    }
+
+    /** Нажатие идёт через стандартный путь — его видят и службы доступности. */
+    @Override
+    public boolean performClick() {
+        return super.performClick();
     }
 
     @Override

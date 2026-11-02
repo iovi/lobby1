@@ -36,6 +36,7 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.IntConsumer;
@@ -271,7 +272,8 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
             for (int col = 0; col < DECK_COLUMNS; col++) {
                 int slot = row * DECK_COLUMNS + col;
                 // Столбцы прижаты друг к другу — колода посередине экрана.
-                CardBackView card = new CardBackView(this, col == 0 ? -1 : 1);
+                CardBackView card = new CardBackView(this);
+                card.setAlign(col == 0 ? -1 : 1);
                 LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,
                         LinearLayout.LayoutParams.MATCH_PARENT, 1);
                 if (col == 0) {
@@ -777,7 +779,7 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
 
         @Override
         public void setRow(int player, Protocol.Mark mark, Set<Protocol.Mark> allowed) {
-            for (Map.Entry<Protocol.Mark, MaterialButton> e : rows.get(player).entrySet()) {
+            for (Map.Entry<Protocol.Mark, MaterialButton> e : Objects.requireNonNull(rows.get(player)).entrySet()) {
                 MaterialButton b = e.getValue();
                 boolean on = e.getKey() == mark;
                 int fill = !on ? R.color.number_idle
@@ -884,7 +886,7 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
 
         @Override
         public void setRow(int player, int fouls, boolean pending) {
-            ImageView[] marks = cells.get(player);
+            ImageView[] marks = Objects.requireNonNull(cells.get(player));
             for (int k = 0; k < marks.length; k++) {
                 boolean done = k < fouls;
                 boolean waiting = pending && k == fouls;
@@ -904,7 +906,7 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
 
         @Override
         public void disable(int player) {
-            LinearLayout row = rows.get(player);
+            LinearLayout row = Objects.requireNonNull(rows.get(player));
             row.setOnClickListener(null);
             row.setClickable(false);
             row.setAlpha(0.3f);
@@ -940,9 +942,8 @@ public class GameActivity extends AppCompatActivity implements GameUi, Announcer
         };
     }
 
-    @SuppressWarnings("unchecked")
     private <T extends View> T find(View root, int id) {
-        return (T) root.findViewById(id);
+        return root.findViewById(id);
     }
 
     private int dp(int value) {

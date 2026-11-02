@@ -34,6 +34,9 @@ android {
 dependencies {
     implementation(libs.appcompat)
     implementation(libs.material)
+    // appcompat сам тянет старую fragment 1.5.4 — из-за разнобоя с новыми activity/core IDE видит
+    // «Ambiguous method call» на super.onCreate. Явная свежая версия согласует их.
+    implementation(libs.fragment)
     testImplementation(libs.junit)
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.ext.junit)
